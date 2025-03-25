@@ -20,7 +20,7 @@
   "motion_sensor": {
     "pin": 23,
     "polling_rate": 0.1,
-    "between_detection_delay": 2
+    "debounce": 2
   },
   "camera": {
     "resolution": {

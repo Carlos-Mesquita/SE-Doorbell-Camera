@@ -3,7 +3,6 @@ import asyncio
 from logging import getLogger
 from typing import Optional, Dict, Any
 
-from doorbell_controller.exceptions import InvalidEventPayload
 from .button import ButtonService
 from .motion_sensor import MotionSensorService
 from .rbg import RGBService
@@ -77,68 +76,54 @@ class PeripheralsService:
 
     async def handle_settings_event(self, event: Event[SettingsEvent]) -> Optional[Dict[str, Any]]:
         if isinstance(event.type, SettingsEvent):
-            expected_fields = []
-            try:
-                if event.type in [SettingsEvent.CHANGE_BUTTON_DEBOUNCE, SettingsEvent.CHANGE_MOTION_SENSOR_DEBOUNCE]:
-                    expected_fields.append('debounce')
-                    service = (
-                        self._button_service
-                        if event.type == SettingsEvent.CHANGE_BUTTON_DEBOUNCE
-                        else self._motion_service
-                    )
-                    service.debounce = event.payload['debounce']
+            if event.type == SettingsEvent.CHANGE_SETTINGS:
+                if 'button' in event.payload:
+                    if 'debounce' in event.payload['button']:
+                        self._button_service.debounce = event.payload['button']['debounce']
+                    if 'polling_rate' in event.payload['button']:
+                        self._button_service.polling_rate = event.payload['button']['polling_rate']
 
-                elif event.type in [SettingsEvent.CHANGE_BUTTON_POLLING, SettingsEvent.CHANGE_MOTION_SENSOR_POLLING]:
-                    expected_fields.append('polling_rate')
-                    service = (
-                        self._button_service
-                        if event.type == SettingsEvent.CHANGE_BUTTON_POLLING
-                        else self._motion_service
-                    )
-                    service.polling_rate = event.payload['polling_rate']
+                if 'motion_sensor' in event.payload:
+                    if 'debounce' in event.payload['motion_sensor']:
+                        self._motion_service.debounce = event.payload['motion_sensor']['debounce']
+                    if 'polling_rate' in event.payload['motion_sensor']:
+                        self._motion_service.polling_rate = event.payload['motion_sensor']['polling_rate']
 
-                elif event.type == SettingsEvent.CHANGE_CAMERA_BITRATE:
-                    expected_fields.append('bitrate')
-                    self._camera_service.bitrate = event.payload['bitrate']
+                if 'camera' in event.payload:
+                    if 'bitrate' in event.payload['camera']:
+                        self._camera_service.bitrate = event.payload['camera']['bitrate']
+                    if 'stop_motion' in event.payload['camera']:
+                        if 'interval' in event.payload['camera']['stop_motion']:
+                            self._camera_service.interval = event.payload['camera']['stop_motion']['interval']
+                        if 'duration' in event.payload['camera']['stop_motion']:
+                            self._recording_duration = event.payload['camera']['stop_motion']['duration']
 
-                elif event.type == SettingsEvent.CHANGE_LED_COLOR:
-                    expected_fields.extend(['r', 'g', 'b'])
+                if 'color' in event.payload and all(key in event.payload['color'] for key in ['r', 'g', 'b']):
                     self._rgb_service.change_color(
-                        event.payload['r'],
-                        event.payload['g'],
-                        event.payload['b']
+                        event.payload['color']['r'],
+                        event.payload['color']['g'],
+                        event.payload['color']['b']
                     )
 
-                elif event.type == SettingsEvent.CHANGE_STOP_MOTION_INTERVAL:
-                    expected_fields.append('interval')
-                    self._camera_service.interval = event.payload['interval']
-
-                elif event.type == SettingsEvent.CHANGE_STOP_MOTION_DURATION:
-                    expected_fields.append('duration')
-                    self._recording_duration = event.payload['duration']
-
-                elif event.type == SettingsEvent.RETRIEVE_CONFIGS:
-                    return {
-                        'color': self._rgb_service.get_color(),
-                        'camera': {
-                            'bitrate': self._camera_service.bitrate,
-                            'stop_motion': {
-                                'interval': self._camera_service.interval,
-                                'duration': self._recording_duration
-                            }
-                        },
-                        'motion_sensor': {
-                            'debounce': self._motion_service.debounce,
-                            'polling_rate': self._motion_service.polling_rate
-                        },
-                        'button': {
-                            'debounce': self._button_service.debounce,
-                            'polling_rate': self._button_service.polling_rate
+            elif event.type == SettingsEvent.GET_SETTINGS:
+                return {
+                    'color': self._rgb_service.get_color(),
+                    'camera': {
+                        'bitrate': self._camera_service.bitrate,
+                        'stop_motion': {
+                            'interval': self._camera_service.interval,
+                            'duration': self._recording_duration
                         }
+                    },
+                    'motion_sensor': {
+                        'debounce': self._motion_service.debounce,
+                        'polling_rate': self._motion_service.polling_rate
+                    },
+                    'button': {
+                        'debounce': self._button_service.debounce,
+                        'polling_rate': self._button_service.polling_rate
                     }
-
-            except (KeyError, TypeError):
-                raise InvalidEventPayload(expected_fields)
+                }
 
     async def _begin_or_reset_recording(self):
         if self._recording_task:
