@@ -12,7 +12,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('camera_app.db');
+    _database = await _initDB('doorbell_camera.db');
     return _database!;
   }
 
@@ -33,7 +33,9 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
         timestamp TEXT NOT NULL,
-        captures TEXT NOT NULL
+        captures TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        duration INTEGER NOT NULL
       )
     ''');
   }
@@ -45,10 +47,22 @@ class DatabaseHelper {
 
   Future<List<Notification>> getNotifications() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('notifications');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notifications',
+      orderBy: 'timestamp DESC'
+    );
     return List.generate(maps.length, (i) {
       return Notification.fromMap(maps[i]);
     });
+  }
+
+  Future<void> deleteNotification(int id) async {
+    final db = await database;
+    await db.delete(
+      'notifications',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> clearNotifications() async {

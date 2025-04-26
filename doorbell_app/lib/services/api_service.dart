@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../models/notification.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../models/notification.dart' as app_notification;
 import '../models/settings.dart';
 import 'auth_service.dart';
 import 'database_helper.dart';
@@ -12,7 +13,8 @@ class ApiService {
   final AuthService authService;
   WebSocketChannel? _channel;
   bool _isConnected = false;
-  final Function(Notification) onNewNotification;
+  final Function(app_notification.Notification) onNewNotification;
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   ApiService({
     required this.serverUrl, 
@@ -43,11 +45,13 @@ class ApiService {
         final List<dynamic> notificationsJson = jsonDecode(response.body);
         
         for (var notification in notificationsJson) {
-          final newNotification = Notification(
+          final newNotification = app_notification.Notification(
             id: notification['id'],
             title: notification['title'],
             timestamp: notification['timestamp'],
             captures: List<String>.from(notification['captures']),
+            eventType: notification['event_type'] ?? 'unknown',
+            duration: notification['duration'] ?? 0,
           );
           
           await DatabaseHelper.instance.insertNotification(newNotification);
@@ -75,32 +79,60 @@ class ApiService {
         (message) {
           final data = jsonDecode(message);
           if (data['type'] == 'notification') {
-            final notification = Notification(
+            final notification = app_notification.Notification(
               id: data['id'],
               title: data['title'],
               timestamp: data['timestamp'],
               captures: List<String>.from(data['captures']),
+              eventType: data['event_type'] ?? 'unknown',
+              duration: data['duration'] ?? 0,
             );
             
             DatabaseHelper.instance.insertNotification(notification);
             onNewNotification(notification);
+            
+            // Show push notification if the event was triggered by doorbell
+            if (notification.eventType == 'doorbell') {
+              _showPushNotification(notification);
+            }
           }
         },
         onDone: () {
           _isConnected = false;
-          Timer(Duration(seconds: 5), connectWebSocket);
+          Timer(const Duration(seconds: 5), connectWebSocket);
         },
         onError: (error) {
           _isConnected = false;
-          Timer(Duration(seconds: 5), connectWebSocket);
+          Timer(const Duration(seconds: 5), connectWebSocket);
         },
       );
       
       _isConnected = true;
     } catch (e) {
       _isConnected = false;
-      Timer(Duration(seconds: 5), connectWebSocket);
+      Timer(const Duration(seconds: 5), connectWebSocket);
     }
+  }
+
+  Future<void> _showPushNotification(app_notification.Notification notification) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'doorbell_channel',
+      'Doorbell Notifications',
+      channelDescription: 'Notifications for doorbell events',
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+    
+    await _notificationsPlugin.show(
+      notification.id,
+      'Doorbell',
+      'Someone is at your door',
+      platformDetails,
+      payload: notification.id.toString(),
+    );
   }
 
   void dispose() {
@@ -126,6 +158,34 @@ class ApiService {
     return '';
   }
 
+  Future<void> controlIndicatorLight(bool enable) async {
+    try {
+      final headers = await _getAuthHeaders();
+      await http.post(
+        Uri.parse('$serverUrl/api/indicators/light'),
+        headers: headers,
+        body: jsonEncode({'enable': enable}),
+      );
+    } catch (e) {
+      print('Failed to control indicator light: $e');
+    }
+  }
+
+  Future<bool> deleteRecording(int id) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.delete(
+        Uri.parse('$serverUrl/api/recordings/$id'),
+        headers: headers,
+      );
+      
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Failed to delete recording: $e');
+      return false;
+    }
+  }
+
   Future<Settings> getSettings() async {
     try {
       final headers = await _getAuthHeaders();
@@ -141,15 +201,26 @@ class ApiService {
       print('Failed to get settings: $e');
     }
     
-    
+    // Default settings if API call fails
     return Settings(
-      color: {'r': 50, 'g': 50, 'b': 50},
+      indicatorLight: {'enabled': true, 'brightness': 75},
       camera: {
         'bitrate': 1000000,
-        'stop_motion': {'interval': 1.0, 'duration': 10.0}
+        'stop_motion': {'interval': 0.5, 'duration': 300.0, 'auto_stop': true}
       },
-      motionSensor: {'debounce': 0.5, 'polling_rate': 0.1},
-      button: {'debounce': 0.5, 'polling_rate': 0.1},
+      motionSensor: {
+        'enabled': true,
+        'sensitivity': 75,
+        'detection_distance': 100, // in cm
+        'debounce': 0.5, 
+        'polling_rate': 0.1
+      },
+      doorbell: {
+        'enabled': true,
+        'notification_sound': true,
+        'debounce': 0.5, 
+        'polling_rate': 0.1
+      },
     );
   }
 

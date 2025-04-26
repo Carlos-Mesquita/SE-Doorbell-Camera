@@ -1,12 +1,13 @@
+import 'package:doorbell_app/screens/about_page.dart';
+import 'package:doorbell_app/screens/dashboard_screen.dart';
+import 'package:doorbell_app/screens/error_page.dart';
+import 'package:doorbell_app/screens/live_stream_screen.dart';
+import 'package:doorbell_app/screens/login_page.dart';
+import 'package:doorbell_app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
-import 'services/background_service.dart';
-import 'screens/splash.dart';
+import 'screens/stop_motion_viewer_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  initBackgroundService();
-  
+void main() {
   runApp(const DoorbellApp());
 }
 
@@ -16,12 +17,8 @@ class DoorbellApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Doorbell App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
-      home: const SplashScreen(),
+      home: const StopMotionViewerScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
