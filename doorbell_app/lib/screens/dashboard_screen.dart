@@ -22,7 +22,7 @@ class DashboardScreen extends StatelessWidget {
               label: 'Gravações',
               color: Colors.blueAccent,
               onTap: () {
-                // Navegar para a página de gravações
+                Navigator.of(context).pushNamed('/stopmotion');
               },
             ),
             _DashboardButton(
@@ -30,7 +30,7 @@ class DashboardScreen extends StatelessWidget {
               label: 'Live Stream',
               color: Colors.redAccent,
               onTap: () {
-                // Navegar para a página de live stream
+                Navigator.of(context).pushNamed('/live');
               },
             ),
             _DashboardButton(
@@ -38,7 +38,7 @@ class DashboardScreen extends StatelessWidget {
               label: 'Definições',
               color: Colors.green,
               onTap: () {
-                // Navegar para a página de definições
+                Navigator.of(context).pushNamed('/settings');
               },
             ),
             _DashboardButton(
@@ -75,9 +75,9 @@ class _DashboardButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: color.withOpacity(0.85),
+          color: color.withAlpha(217),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: Colors.black26,
               blurRadius: 8,

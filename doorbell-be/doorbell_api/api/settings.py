@@ -1,11 +1,10 @@
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends
 from doorbell_api.dtos.settings import SettingsDTO
 from doorbell_api.controllers import ISettingsController
 from doorbell_api.middlewares import OAuth2Authorized
 
 settings_router = APIRouter()
-
 controller_name = "settings_controller"
 
 

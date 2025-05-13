@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class IAuthService(ABC):
 
     @abstractmethod
-    async def create_access_and_refresh_tokens(self, creds: UserCredentialsDTO) -> Optional[Tuple[str, str]]:
+    async def create_access_and_refresh_tokens(self, creds: "UserCredentialsDTO") -> Optional[Tuple[str, str]]:
         pass
 
     @abstractmethod
@@ -20,7 +20,7 @@ class IAuthService(ABC):
         pass
 
     @abstractmethod
-    async def authenticate_user(self, creds: UserCredentialsDTO):
+    async def authenticate_user(self, creds: "UserCredentialsDTO") -> str:
         pass
 
     @staticmethod

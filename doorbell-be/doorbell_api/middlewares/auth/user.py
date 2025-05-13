@@ -21,7 +21,12 @@ class User(BaseUser):
     def identity(self, value: str):
         self._identity = value
 
-    # Not in use, just to comply with starlette's BaseUser
+
     @property
     def display_name(self) -> str:
-        return self._identity
+
+        return self._display_name if self._display_name else self._identity
+
+    @display_name.setter
+    def display_name(self, value: str):
+        self._display_name = value

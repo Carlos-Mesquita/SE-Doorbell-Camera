@@ -11,7 +11,7 @@ class ICamera(ABC):
         pass
 
     @abstractmethod
-    def begin_stop_motion(self):
+    def begin_stop_motion(self, e_id: str):
         pass
 
     @abstractmethod

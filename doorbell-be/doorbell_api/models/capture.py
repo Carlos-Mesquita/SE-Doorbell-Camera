@@ -12,4 +12,4 @@ class Capture(Base, TimestampMixin):
     notification_id: Mapped[int] = mapped_column(ForeignKey("notifications.id"))
     path: Mapped[str] = mapped_column()
 
-    notification: Mapped[Notification] = relationship(ForeignKey("captures"))
+    notification: Mapped[Notification] = relationship("Notification", back_populates="captures")

@@ -1,4 +1,4 @@
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO # type: ignore
 from typing import Dict
 
 from doorbell_controller.exceptions import ConfigException
@@ -12,7 +12,7 @@ class RGBService(IPeripheral, IRGB):
             self._PIN_R = int(config['pins']['R'])
             self._PIN_G = int(config['pins']['G'])
             self._PIN_B = int(config['pins']['B'])
-            self._FREQ = int(config['pins']['freq'])
+            self._FREQ = int(config['freq'])
 
             self._r = int(config['color']['R'])
             self._g = int(config['color']['G'])
@@ -55,7 +55,7 @@ class RGBService(IPeripheral, IRGB):
     def turn_off(self):
         self._set_color(0, 0, 0)
 
-    def cleanup(self):
+    async def cleanup(self):
         self._pwm_r.stop()
         self._pwm_g.stop()
         self._pwm_b.stop()

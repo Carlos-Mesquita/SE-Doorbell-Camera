@@ -32,7 +32,3 @@ class IBaseController(ABC, Generic[TDTO]):
     @abstractmethod
     async def delete_by_ids(self, model_ids: List[int]) -> int:
         pass
-
-    @abstractmethod
-    async def count_all(self, filter_by: Optional[Dict[str, Any]] = None) -> HitsDTO:
-        pass

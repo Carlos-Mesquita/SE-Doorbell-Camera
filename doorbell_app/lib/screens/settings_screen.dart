@@ -44,7 +44,7 @@ class SettingsScreen extends StatelessWidget {
             leading: const Icon(Icons.info_outline),
             title: const Text('Sobre o projeto'),
             onTap: () {
-              // Mostrar informação sobre o projeto
+              Navigator.of(context).pushNamed('/about');
             },
           ),
           ListTile(

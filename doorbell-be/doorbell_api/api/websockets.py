@@ -1,6 +1,11 @@
+import logging
+
 from dependency_injector.wiring import inject, Provide
-from fastapi import APIRouter, Depends, Cookie, Query
+from fastapi import APIRouter, Depends, Query
 from starlette.websockets import WebSocket
+from doorbell_api.controllers import IWebSocketController
+
+logger = logging.getLogger(__name__)
 
 ws_router = APIRouter()
 controller = 'ws_controller'
@@ -9,23 +14,33 @@ controller = 'ws_controller'
     "/notifications"
 )
 @inject
-async def chat(
+async def notifications(
     websocket: WebSocket,
     token: str = Query(),
-    refresh_token: str = Cookie(),  # Even though the value isn't read it makes sure that the client has a refresh token
-    chat_controller: IWebsocketController = Depends(Provide[controller])
+    ws_controller: IWebSocketController = Depends(Provide[controller])
 ):
-    await chat_controller.chat(websocket, token)
+    await ws_controller.push_notifications(websocket, token)
 
 
 @ws_router.websocket(
-    "/controller"
+    "/camera"
 )
 @inject
-async def chat(
+async def camera(
     websocket: WebSocket,
     token: str = Query(),
-    refresh_token: str = Cookie(),  # Even though the value isn't read it makes sure that the client has a refresh token
-    chat_controller: IWebsocketController = Depends(Provide[controller])
+    ws_controller: IWebSocketController = Depends(Provide[controller])
 ):
-    await chat_controller.chat(websocket, token)
+    await ws_controller.process_camera(websocket, token)
+
+
+@ws_router.websocket(
+    "/webrtc"
+)
+@inject
+async def webrtc_signaling(
+    websocket: WebSocket,
+    token: str = Query(),
+    ws_controller: IWebSocketController = Depends(Provide[controller])
+):
+    await ws_controller.handle_signaling(websocket, token)

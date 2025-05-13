@@ -2,23 +2,25 @@ import json
 import asyncio
 import websockets
 
+from asyncio import create_task, CancelledError, Future, wait_for, iscoroutine
 from logging import getLogger
 from typing import Dict, List, Callable, Optional, Union, Awaitable
 
-from doorbell_core.models import Message, MessageType
+from doorbell_shared.models import Message, MessageType
 
 
 class WebSocketClient:
 
-    def __init__(self, server_url: str, api_key: str):
-        self._server_url = server_url
-        self._api_key = api_key
+    def __init__(self, ws_url: str, ws_endpoint: str, token: str, message_handler=True):
+        self._ws_url = f"{ws_url}/{ws_endpoint}"
+        self._token = token
         self.connected = False
         self._message_handlers: Dict[MessageType, List[Callable]] = {}
-        self._response_futures: Dict[str, asyncio.Future[Message]] = {}
+        self._response_futures: Dict[str, Future[Message]] = {}
         self._logger = getLogger(__name__)
         self._ws = None
         self._task = None
+        self._message_handler = message_handler
 
     def register_handler(self, msg_type: MessageType, handler: Callable[[Message], Union[None, Awaitable[None]]]):
         """
@@ -50,36 +52,22 @@ class WebSocketClient:
                 try:
                     result = handler(message)
                     # Check if the handler is a coroutine and await it if so
-                    if asyncio.iscoroutine(result):
+                    if iscoroutine(result):
                         await result
                 except Exception as e:
                     self._logger.error(f"Error in message handler: {e}")
 
     async def connect(self):
-        self._logger.info(f"Connecting to {self._server_url}")
-        self._ws = await websockets.connect(self._server_url)
-
-        auth_msg = Message(
-            msg_type=MessageType.AUTH,
-            payload={"token": self._api_key}
-        )
-
-        await self._ws.send(auth_msg.model_dump_json())
-
-        auth_result = await self._ws.recv()
-        auth_result = Message(**json.loads(auth_result))
-
-        if auth_result.msg_type != MessageType.AUTH_RESULT:
-            error = auth_result.payload.get("error", "Unknown authentication error")
-            self._logger.error(f"Authentication failed: {error}")
-            await self._ws.close()
-            raise ValueError(f"Authentication failed: {error}")
+        self._logger.info(f"Connecting to {self._ws_url}")
+        self._ws = await websockets.connect(f"{self._ws_url}?token={self._token}")
 
         self._logger.info("Connected and authenticated successfully")
         self.connected = True
 
-        # Start listener task
-        self._task = asyncio.create_task(self._listener())
+        if self._message_handler:
+            self._task = asyncio.create_task(self._listener())
+        else:
+            return self._ws
 
     async def _listener(self):
         """Listen for incoming messages."""
@@ -95,7 +83,7 @@ class WebSocketClient:
                     break
                 except Exception as e:
                     self._logger.error(f"Error processing message: {e}")
-        except asyncio.CancelledError:
+        except CancelledError:
             self._logger.info("WebSocket listener task cancelled")
         finally:
             self.connected = False
@@ -146,7 +134,7 @@ class WebSocketClient:
             raise ConnectionError("Not connected to server")
 
         # Create a future to store the response
-        future = asyncio.Future()
+        future = Future()
         self._response_futures[message.msg_id] = future
 
         # Send the message
@@ -154,7 +142,7 @@ class WebSocketClient:
 
         # Wait for the response with timeout
         try:
-            response = await asyncio.wait_for(future, timeout)
+            response = await wait_for(future, timeout)
 
             # Check if the response is of the expected type
             if expected_type and response.msg_type != expected_type:

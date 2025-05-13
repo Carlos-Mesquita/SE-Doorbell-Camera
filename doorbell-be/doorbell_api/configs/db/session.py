@@ -16,11 +16,15 @@ load_dotenv()
 env = os.environ.get('ENV', 'LOCAL').upper()
 connection_string = os.environ[f'DB_CONNECTION_STRING_{env}']
 
-session_context: ContextVar[str] = ContextVar("session_context")
+session_context: ContextVar[str] = ContextVar("session_context", default=None)
 
 
 def get_session_context() -> str:
-    return session_context.get()
+    context = session_context.get()
+    if context is None:
+        from uuid import uuid4
+        return str(uuid4())
+    return context
 
 
 def set_session_context(session_id: str) -> Token:

@@ -1,5 +1,6 @@
-from dependency_injector import providers, containers
+from asyncio import Queue
 
+from dependency_injector import providers, containers
 from doorbell_api.configs.db import scoped_session
 
 
@@ -9,11 +10,14 @@ class DependencyInjector:
         self._container = containers.DynamicContainer()
 
     def inject(self):
+        self._setup_configs()
+        self._setup_mappers()
         self._setup_repositories()
+        self._setup_shared_instances()
         self._setup_services()
         self._setup_controllers()
         self._container.wire(
-            packages=["doorbell-api"]
+            packages=["doorbell_api"]
         )
         return self
 
@@ -27,7 +31,13 @@ class DependencyInjector:
         self._container.config.jwt.access.key.from_env("JWT_ACCESS_SECRET_KEY", required=True)
         self._container.config.jwt.access.expires.from_env("JWT_ACCESS_TOKEN_EXPIRE", required=True)
 
-    def _config_mappers(self):
+    def _setup_shared_instances(self):
+        from doorbell_api.services.impl import WebRTCSignalingService
+
+        self._container.message_queue = providers.Singleton(Queue)
+        self._container.signaling_service = providers.Singleton(WebRTCSignalingService)
+
+    def _setup_mappers(self):
         from doorbell_api.mappers.impl import (
             CaptureMapper, NotificationMapper, SettingsMapper
         )
@@ -63,7 +73,12 @@ class DependencyInjector:
     def _setup_services(self):
         from doorbell_api.services.impl import (
             AuthService, TokenService, CaptureService,
-            SettingsService, NotificationService
+            SettingsService, NotificationService,
+            WebRTCSignalingService, MessageHandler
+        )
+
+        self._container.signaling_service = providers.Singleton(
+            WebRTCSignalingService
         )
 
         self._container.token_service = providers.Factory(
@@ -80,6 +95,10 @@ class DependencyInjector:
             NotificationService, mapper=self._container.notification_mapper, repo=self._container.notification_repo
         )
 
+        self._container.message_handler = providers.Factory(
+            MessageHandler, notification_service=self._container.notification_service
+        )
+
         self._container.auth_service = providers.Factory(
             AuthService,
             token_service=self._container.token_service,
@@ -90,7 +109,8 @@ class DependencyInjector:
     def _setup_controllers(self):
         from doorbell_api.controllers.impl import (
             AuthController, CaptureController,
-            SettingsController, NotificationController
+            SettingsController, NotificationController,
+            WebsocketController
         )
 
         self._container.auth_controller = providers.Factory(
@@ -104,4 +124,11 @@ class DependencyInjector:
         )
         self._container.notification_controller = providers.Factory(
             NotificationController, service=self._container.notification_service
+        )
+
+        self._container.ws_controller = providers.Factory(
+            WebsocketController, auth_service=self._container.auth_service,
+            message_handler=self._container.message_handler,
+            signaling_service=self._container.signaling_service,
+            message_queue=self._container.message_queue
         )

@@ -1,11 +1,9 @@
 class Settings {
-  final Map<String, dynamic> indicatorLight;
   final Map<String, dynamic> camera;
   final Map<String, dynamic> motionSensor;
   final Map<String, dynamic> doorbell;
 
   Settings({
-    required this.indicatorLight,
     required this.camera,
     required this.motionSensor,
     required this.doorbell,
@@ -13,7 +11,6 @@ class Settings {
 
   factory Settings.fromJson(Map<String, dynamic> json) {
     return Settings(
-      indicatorLight: json['indicator_light'] ?? {'enabled': true, 'brightness': 75},
       camera: json['camera'] ?? {
         'bitrate': 1000000,
         'stop_motion': {
@@ -40,7 +37,6 @@ class Settings {
 
   Map<String, dynamic> toJson() {
     return {
-      'indicator_light': indicatorLight,
       'camera': camera,
       'motion_sensor': motionSensor,
       'doorbell': doorbell,
@@ -54,7 +50,6 @@ class Settings {
     Map<String, dynamic>? doorbell,
   }) {
     return Settings(
-      indicatorLight: indicatorLight ?? this.indicatorLight,
       camera: camera ?? this.camera,
       motionSensor: motionSensor ?? this.motionSensor,
       doorbell: doorbell ?? this.doorbell,

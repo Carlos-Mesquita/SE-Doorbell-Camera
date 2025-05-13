@@ -1,0 +1,21 @@
+services:
+  # Before running compose up, export all variables and then run generate_confs.sh
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/bucket:/var/www/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+  coturn:
+    image: coturn/coturn
+    container_name: coturn
+    network_mode: host
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
+      - /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem:/etc/coturn/fullchain.pem:ro
+      - /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem:/etc/coturn/privkey.pem:ro
+    restart: unless-stopped

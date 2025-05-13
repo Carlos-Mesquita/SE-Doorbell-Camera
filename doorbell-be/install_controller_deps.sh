@@ -34,10 +34,6 @@ if [ "$python_dev_installed" -ne 0 ] || [ "$picamera_installed" -ne 0 ]; then
     fi
 fi
 
-echo "Installing pip requirements..."
-sudo pip3 install -r ./doorbell_controller/requirements.txt
-
-
 echo "Checking and adding user to required groups..."
 USER=$(whoami)
 GROUP_CHANGES=0

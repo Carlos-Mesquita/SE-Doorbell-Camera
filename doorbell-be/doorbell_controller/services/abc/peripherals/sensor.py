@@ -1,5 +1,5 @@
-import asyncio
 from abc import ABC, abstractmethod
+from asyncio import Queue, Lock, Task, CancelledError, sleep, create_task
 from datetime import datetime
 from logging import getLogger
 from typing import Optional
@@ -8,13 +8,19 @@ from doorbell_controller.models import Event, SensorEvent
 
 
 class ISensor(ABC):
-    def __init__(self, event_queue: asyncio.Queue[Event[SensorEvent]], debounce: float, polling_rate: float):
+
+    def __init__(
+        self,
+        event_queue: Queue[Event[SensorEvent]],
+        debounce: float,
+        polling_rate: float
+    ):
         self._event_queue = event_queue
         self._debounce = debounce
         self._polling = polling_rate
-        self._lock = asyncio.Lock()
+        self._lock = Lock()
         self._running = False
-        self._detection_task: Optional[asyncio.Task] = None
+        self._detection_task: Optional[Task] = None
         self._last_trigger_time = 0.0
         self._logger = getLogger(__name__)
 
@@ -46,7 +52,7 @@ class ISensor(ABC):
         async with self._lock:
             if not self._running:
                 self._running = True
-                self._detection_task = asyncio.create_task(self._detection_loop())
+                self._detection_task = create_task(self._detection_loop())
 
     async def stop(self):
         async with self._lock:
@@ -55,7 +61,7 @@ class ISensor(ABC):
             self._detection_task.cancel()
             try:
                 await self._detection_task
-            except asyncio.CancelledError:
+            except CancelledError:
                 pass
             self._detection_task = None
 
@@ -66,31 +72,33 @@ class ISensor(ABC):
                     if not self._running:
                         break
 
+                    current_polling = self._polling
+                    current_debounce = self._debounce
+
                 current_time = datetime.now().timestamp()
 
-                if await self.triggered():
-                    async with self._lock:
-                        if current_time - self._last_trigger_time >= self._debounce:
-                            await self._event_queue.put(Event(
-                                type=await self._event_type,
-                                timestamp=datetime.now()
-                            ))
-                            self._last_trigger_time = current_time
+                if self.triggered():
+                    # Only place a new alert if debounce period has passed
+                    if current_time - self._last_trigger_time >= current_debounce:
+                        await self._event_queue.put(Event(
+                            type=self._event_type,
+                            timestamp=datetime.now()
+                        ))
 
-                await asyncio.sleep(self._polling)
-
-            except asyncio.CancelledError:
+                        self._last_trigger_time = current_time
+                await sleep(current_polling)
+            except CancelledError:
                 break
             except Exception as e:
                 self._logger.error(f"Error in detection loop: {e}")
 
     @abstractmethod
-    async def triggered(self) -> bool:
+    def triggered(self) -> bool:
         pass
 
     @property
     @abstractmethod
-    async def _event_type(self) -> SensorEvent:
+    def _event_type(self) -> SensorEvent:
         pass
 
     @abstractmethod

@@ -1,3 +1,5 @@
+import os
+
 import click
 import uvicorn
 
@@ -5,13 +7,14 @@ import uvicorn
 @click.command()
 @click.option(
     "--env",
-    type=click.Choice(["local", "dev", "prod"], case_sensitive=False),
+    type=click.Choice(["local", "staging", "production"], case_sensitive=False),
     default="local",
 )
 def main(env: str):
+    os.environ["ENV"] = env.upper()
     uvicorn.run(
         app=f"doorbell_api:app",
-        host="localhost",
+        host="0.0.0.0",
         port=8000,
         reload=True if env != "prod" else False,
         workers=1,

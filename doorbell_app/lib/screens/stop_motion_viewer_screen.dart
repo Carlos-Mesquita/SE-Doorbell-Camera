@@ -11,15 +11,15 @@ class _StopMotionViewerScreenState extends State<StopMotionViewerScreen> {
   Map<String, List<String>> sequences = {
     'Video - 2025/04/10': [
       'assets/images/seq1/img1.webp',
-      'assets/images/seq1/istockphoto-814423752-612x612.jpg',
-      'assets/images/seq1/MainBefore.jpg',
-      'assets/images/seq1/transferir.jpeg',
+      'assets/images/seq1/img2.jpg',
+      'assets/images/seq1/img3.jpg',
+      'assets/images/seq1/img4.jpeg',
     ],
     'Video - 2025/04/11': [
-      'assets/images/seq2/free-nature-images.jpg',
-      'assets/images/seq2/istockphoto-1317323736-612x612.jpg',
-      'assets/images/seq2/pexels-hsapir-1054655.jpg',
-      'assets/images/seq2/young-conceptual-image-large-stone-shape-human-brain-conceptual-image-large-stone-shape-110748113.webp',
+      'assets/images/seq2/img5.jpg',
+      'assets/images/seq2/img6.jpg',
+      'assets/images/seq2/img7.jpg',
+      'assets/images/seq2/img8.webp',
     ],
   };
 

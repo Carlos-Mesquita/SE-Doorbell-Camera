@@ -5,8 +5,6 @@ import '../models/notification.dart';
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
-  
-  static const String serverUrl = "http://127.0.0.1:8000";
 
   DatabaseHelper._init();
 

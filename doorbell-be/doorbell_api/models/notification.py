@@ -12,6 +12,7 @@ class Notification(Base, TimestampMixin):
     title: Mapped[str] = mapped_column()
 
     captures: Mapped[List['Capture']] = relationship(
+        "Capture",
         back_populates="notification",
         cascade="all, delete-orphan"
     )

@@ -13,3 +13,7 @@ class DecodeTokenException(CustomAPIException):
 class ExpiredTokenException(CustomAPIException):
     code = HTTPStatus.UNAUTHORIZED
     message = "No permission -- expired token"
+
+class ForbiddendWS(CustomAPIException):
+    code = HTTPStatus.UNAUTHORIZED
+    message = "No permission -- invalid token"

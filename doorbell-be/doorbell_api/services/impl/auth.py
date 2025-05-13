@@ -20,12 +20,11 @@ class AuthService(IAuthService):
         self._config = config
 
     async def create_access_and_refresh_tokens(self, creds: UserCredentialsDTO) -> Optional[Tuple[str, str]]:
-        await self.authenticate_user(creds)
-        session_id = uuid4()
+        uid = await self.authenticate_user(creds)
 
         access_token = TokenHelper.encode(
             payload={
-                "id": session_id.__str__(),
+                "id": uid,
             },
             key=self._config["jwt"]["access"]["key"],
             expire_period=(datetime.now() + timedelta(seconds=int(self._config["jwt"]["access"]["expires"]))),
@@ -41,7 +40,7 @@ class AuthService(IAuthService):
         refresh_token = TokenHelper.encode(
             payload={
                 "guid": guid.__str__(),
-                "id": session_id.__str__()
+                "id": uid
             },
             key=self._config["jwt"]["refresh"]["key"],
             expire_period=(created_at + timedelta(seconds=int(self._config["jwt"]["refresh"]["expires"]))),
@@ -67,17 +66,17 @@ class AuthService(IAuthService):
         return access_token
 
     @staticmethod
-    async def _verify_password(user_pwd, pwd):
+    def _verify_password(user_pwd, pwd):
         return bcrypt.checkpw(
             user_pwd.encode('utf-8'),
             pwd.encode('utf-8')
         )
 
-    async def authenticate_user(self, creds: UserCredentialsDTO):
+    async def authenticate_user(self, creds: UserCredentialsDTO) -> str:
         user = await self._user_repo.get_by_email(creds.email)
-
-        if not user or not self._verify_password(user.password, creds.password):
+        if not user or not self._verify_password(creds.password, user.password):
             raise UnauthorizedException
+        return str(user.id)
 
     async def revoke_refresh_token(self, refresh_token: str):
         await self._token_service.revoke_refresh_token(UUID(refresh_token))

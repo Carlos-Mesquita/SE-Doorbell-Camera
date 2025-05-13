@@ -1,4 +1,4 @@
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO   # type: ignore
 
 from queue import Queue
 from typing import Dict, Any
@@ -33,5 +33,5 @@ class MotionSensorService(IPeripheral, ISensor):
     def _event_type(self) -> SensorEvent:
         return SensorEvent.MOTION_DETECTED
 
-    def cleanup(self):
+    async def cleanup(self):
         GPIO.cleanup([self._PIN]) # type: ignore

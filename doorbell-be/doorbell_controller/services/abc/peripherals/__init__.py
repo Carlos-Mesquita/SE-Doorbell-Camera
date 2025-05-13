@@ -9,20 +9,20 @@ from .camera import ICamera
 class IPeripheral(ABC):
 
     @abstractmethod
-    def cleanup(self):
+    async def cleanup(self):
         pass
 
 
-SensorService: TypeAlias = Union[IPeripheral, ISensor]
-RGBService: TypeAlias = Union[IPeripheral, IRGB]
-CameraService: TypeAlias = Union[IPeripheral, ICamera]
+ISensorService: TypeAlias = Union[IPeripheral, ISensor]
+IRGBService: TypeAlias = Union[IPeripheral, IRGB]
+ICameraService: TypeAlias = Union[IPeripheral, ICamera]
 
 __all__ = [
     "IPeripheral",
     "IRGB",
     "ISensor",
     "ICamera",
-    "SensorService",
-    "RGBService",
-    "CameraService"
+    "ISensorService",
+    "IRGBService",
+    "ICameraService"
 ]

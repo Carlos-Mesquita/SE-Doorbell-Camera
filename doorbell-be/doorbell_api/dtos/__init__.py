@@ -4,6 +4,7 @@ from .notification import NotificationDTO
 from .settings import SettingsDTO
 from .creds import UserCredentialsDTO
 from .hits import HitsDTO
+from .webrtc import ClientInfo, RoomInfo
 
 __all__ = [
     'TokenDTO',
@@ -11,5 +12,7 @@ __all__ = [
     'NotificationDTO',
     'SettingsDTO',
     'UserCredentialsDTO',
-    'HitsDTO'
+    'HitsDTO',
+    'ClientInfo',
+    'RoomInfo',
 ]

@@ -2,44 +2,44 @@ import json
 import asyncio
 import signal
 import logging
-import os
+import RPi.GPIO as GPIO # type: ignore
+from asyncio import wait_for, CancelledError, create_task, Queue, run_coroutine_threadsafe, get_running_loop
 
-import RPi.GPIO as GPIO
-
-from dotenv import load_dotenv
-
-from doorbell_controller.exceptions import InvalidEventPayload
-from doorbell_controller.models import Event, SensorEvent
-from doorbell_core.models import Message, MessageType
+from doorbell_controller.models import Event, SensorEvent, Capture
+from doorbell_shared.models import Message, MessageType
 from doorbell_controller.services.impl import (
     ButtonService,
     MotionSensorService,
     RGBService,
     CameraService,
     PeripheralsService,
-    WebSocketClient
+    WebSocketClient,
+    FaceDetector
 )
 
 
 class DoorbellController:
-    def __init__(self, config_path: str, server_url: str, auth_token: str):
+    def __init__(self, auth_token: str, ws_url: str):
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         self._logger = logging.getLogger(__name__)
 
-        with open(config_path, 'r') as f:
+        with open('./doorbell_controller/settings.json', 'r') as f:
             self.config = json.load(f)
 
         GPIO.setmode(GPIO.BCM) # type: ignore
         GPIO.setwarnings(False) # type: ignore
 
-        self.event_queue: asyncio.Queue[Event[SensorEvent]] = asyncio.Queue()
+        self.event_queue: Queue[Event[SensorEvent]] = Queue()
+        self.capture_queue: Queue[Capture] = Queue()
+        self._auth_token = auth_token
 
         self._init_services()
 
-        self.ws_client = WebSocketClient(server_url, auth_token)
+        self._ws_client = WebSocketClient(ws_url, "messages", auth_token)
+        self._webrtc_client = WebSocketClient()
         self._setup_ws_handlers()
 
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -60,7 +60,10 @@ class DoorbellController:
 
         self.rgb_service = RGBService(self.config['rgb'])
 
-        self.camera_service = CameraService(self.config['camera'])
+        self.camera_service = CameraService(
+            self.config['camera'], self.event_queue, self.capture_queue, FaceDetector(),
+            self._auth_token, self._signaling_server, self._ws_client
+        )
 
         self.peripherals = PeripheralsService(
             self.button_service,
@@ -71,15 +74,15 @@ class DoorbellController:
         )
 
     def _setup_ws_handlers(self):
-        self.ws_client.register_handler(
+        self._ws_client.register_handler(
             MessageType.STREAM_START,
             self._handle_start_stream
         )
-        self.ws_client.register_handler(
+        self._ws_client.register_handler(
             MessageType.STREAM_STOP,
             self._handle_stop_stream
         )
-        self.ws_client.register_handler(
+        self._ws_client.register_handler(
             MessageType.SETTINGS_REQUEST,
             self._handle_settings
         )
@@ -88,7 +91,7 @@ class DoorbellController:
         while self.running:
             try:
                 try:
-                    event = await asyncio.wait_for(
+                    event = await wait_for(
                         self.event_queue.get(),
                         timeout=1.0
                     )
@@ -104,26 +107,42 @@ class DoorbellController:
                 else:
                     msg = MessageType.MOTION_DETECTED.value
 
-                await self.ws_client.send_message(Message(
+                await self._ws_client.send_message(Message(
                     msg_type=msg,
                 ))
-
-            except asyncio.CancelledError:
+            except CancelledError:
                 break
             except Exception as e:
                 if self.running:
                     self._logger.error(f'Error processing sensor event: {e}')
 
+    async def _process_capture_events(self):
+        while self.running:
+            try:
+                capture = await wait_for(
+                    self.capture_queue.get(),
+                    timeout=1.0
+                )
+                await self._ws_client.send_message(Message(
+                    msg_type=MessageType.CAPTURE,
+                    payload=capture.model_dump()
+                ))
+            except CancelledError:
+                break
+            except Exception as e:
+                if self.running:
+                    self._logger.error(f'Error processing capture event: {e}')
+
     async def _handle_start_stream(self, message: Message):
         stream_url = self.peripherals.start_stream()
         if stream_url:
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.STREAM_ACK,
                 payload={'url': stream_url},
                 reply_to=message.msg_id
             ))
         else:
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.ERROR,
                 reply_to=message.msg_id
             ))
@@ -131,12 +150,12 @@ class DoorbellController:
     async def _handle_stop_stream(self, message: Message):
         success = self.peripherals.stop_stream()
         if success:
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.STREAM_ACK,
                 reply_to=message.msg_id
             ))
         else:
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.ERROR,
                 reply_to=message.msg_id
             ))
@@ -151,21 +170,14 @@ class DoorbellController:
             if result is None:
                 result = {}
 
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.SETTINGS_ACK,
                 payload={**result},
                 reply_to=message.msg_id
             ))
 
-        except InvalidEventPayload as e:
-            await self.ws_client.send_message(Message(
-                msg_type=MessageType.ERROR,
-                payload={'error': f'Expected field(s): {",".join(e.fields)}'},
-                reply_to=message.msg_id
-            ))
-
         except Exception as e:
-            await self.ws_client.send_message(Message(
+            await self._ws_client.send_message(Message(
                 msg_type=MessageType.ERROR,
                 payload={'error': str(e)},
                 reply_to=message.msg_id
@@ -173,41 +185,25 @@ class DoorbellController:
 
     def _signal_handler(self, signum, frame):
         self._logger.info(f'Received signal {signum}')
-        self.stop()
+        try:
+            loop = get_running_loop()
+            loop.create_task(self.stop())
+        except RuntimeError:
+            run_coroutine_threadsafe(self.stop(), asyncio.new_event_loop())
 
     async def start(self):
         self._logger.info('Starting doorbell controller...')
         self.running = True
 
-        await self.ws_client.connect()
         await self.peripherals.start()
-        await self._process_sensor_events()
+        sensor_task = create_task(self._process_sensor_events())
+        capture_task = create_task(self._process_capture_events())
+        ws_task = self._ws_client.connect()
+        await asyncio.gather(sensor_task, capture_task, ws_task)
 
-    def stop(self):
+    async def stop(self):
         self._logger.info('Stopping doorbell controller...')
         self.running = False
 
-        self.peripherals.stop()
-        asyncio.create_task(self.ws_client.disconnect())
-
-
-async def main():
-    load_dotenv()
-
-    controller = DoorbellController(
-        'settings.json',
-        os.getenv('WS_URL'),
-        os.getenv('API_KEY')
-    )
-
-    try:
-        await controller.start()
-    except KeyboardInterrupt:
-        controller.stop()
-    except Exception as e:
-        logging.error(f"Error in main loop: {e}")
-        controller.stop()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        await self.peripherals.stop()
+        await self._ws_client.disconnect()

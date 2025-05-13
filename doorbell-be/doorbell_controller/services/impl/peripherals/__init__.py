@@ -1,4 +1,5 @@
 import asyncio
+from asyncio import Lock, Task, sleep, create_task, CancelledError
 
 from logging import getLogger
 from typing import Optional, Dict, Any
@@ -12,18 +13,18 @@ from doorbell_controller.models import (
     Event, SensorEvent, SettingsEvent, ControllerState
 )
 from doorbell_controller.services import (
-    ISensor, SensorService, RGBService, CameraService
+    ISensor, ISensorService, IRGBService, ICameraService
 )
 
 
 class PeripheralsService:
     def __init__(
-        self,
-        button_service: SensorService,
-        motion_service: SensorService,
-        rgb_service: RGBService,
-        camera_service: CameraService,
-        stop_motion_duration: int
+            self,
+            button_service: ISensorService,
+            motion_service: ISensorService,
+            rgb_service: IRGBService,
+            camera_service: ICameraService,
+            stop_motion_duration: int
     ):
         self._button_service = button_service
         self._motion_service = motion_service
@@ -31,15 +32,15 @@ class PeripheralsService:
         self._camera_service = camera_service
 
         self._stop_event = asyncio.Event()
-        self._state_lock = asyncio.Lock()
+        self._state_lock = Lock()
 
         self._state = ControllerState.IDLE
 
-        self._recording_task: Optional[asyncio.Task] = None
+        self._recording_task: Optional[Task] = None
         self._recording_duration = stop_motion_duration
 
-        self._button_task: Optional[asyncio.Task] = None
-        self._motion_task: Optional[asyncio.Task] = None
+        self._button_task: Optional[Task] = None
+        self._motion_task: Optional[Task] = None
 
         self._logger = getLogger(__name__)
 
@@ -66,7 +67,7 @@ class PeripheralsService:
                 await service.start()
             except Exception as e:
                 self._logger.error(f"{name} service error: {e}")
-                await asyncio.sleep(5)
+                await sleep(5)
 
     async def handle_sensor_event(self, event: Event[SensorEvent]):
         if isinstance(event.type, SensorEvent):
@@ -90,8 +91,6 @@ class PeripheralsService:
                         self._motion_service.polling_rate = event.payload['motion_sensor']['polling_rate']
 
                 if 'camera' in event.payload:
-                    if 'bitrate' in event.payload['camera']:
-                        self._camera_service.bitrate = event.payload['camera']['bitrate']
                     if 'stop_motion' in event.payload['camera']:
                         if 'interval' in event.payload['camera']['stop_motion']:
                             self._camera_service.interval = event.payload['camera']['stop_motion']['interval']
@@ -124,13 +123,14 @@ class PeripheralsService:
                         'polling_rate': self._button_service.polling_rate
                     }
                 }
+        return None
 
     async def _begin_or_reset_recording(self):
         if self._recording_task:
             self._recording_task.cancel()
             try:
                 await self._recording_task
-            except asyncio.CancelledError:
+            except CancelledError:
                 pass
             self._recording_task = None
 
@@ -151,13 +151,13 @@ class PeripheralsService:
 
         # Begin or reset timer
         if current_state == ControllerState.RECORDING:
-            self._recording_task = asyncio.create_task(self._recording_timer())
+            self._recording_task = create_task(self._recording_timer())
 
     async def _recording_timer(self):
         try:
-            await asyncio.sleep(self._recording_duration)
+            await sleep(self._recording_duration)
             await self._stop_recording()
-        except asyncio.CancelledError:
+        except CancelledError:
             pass
 
     async def _stop_recording(self):
@@ -167,30 +167,31 @@ class PeripheralsService:
                 await self._camera_service.end_stop_motion()
                 await self._transition_to(ControllerState.IDLE)
 
-    async def start_stream(self):
+    async def start_stream(self) -> Optional[str]:
         async with self._state_lock:
             if self._state == ControllerState.IDLE or self._state == ControllerState.STREAMING:
-                stream_url = await self._camera_service.start_stream()
-                if stream_url and self._state == ControllerState.IDLE:
+                stream_info = await self._camera_service.start_stream()
+                if stream_info and self._state == ControllerState.IDLE:
                     await self._transition_to(ControllerState.STREAMING)
-                return stream_url
+                return stream_info
 
             elif self._state == ControllerState.RECORDING:
                 if self._recording_task:
                     self._recording_task.cancel()
                     try:
                         await self._recording_task
-                    except asyncio.CancelledError:
+                    except CancelledError:
                         pass
                     self._recording_task = None
                 await self._camera_service.end_stop_motion()
 
-                stream_url = await self._camera_service.start_stream()
-                if stream_url:
+                stream_info = await self._camera_service.start_stream()
+                if stream_info:
                     await self._transition_to(ControllerState.STREAMING)
                 else:
                     await self._transition_to(ControllerState.IDLE)
-                return stream_url
+                return stream_info
+            return None
 
     async def stop_stream(self):
         async with self._state_lock:
@@ -201,10 +202,10 @@ class PeripheralsService:
         return False
 
     async def start(self):
-        self._button_task = asyncio.create_task(
+        self._button_task = create_task(
             self._run_sensor(self._button_service, "Button")
         )
-        self._motion_task = asyncio.create_task(
+        self._motion_task = create_task(
             self._run_sensor(self._motion_service, "Motion")
         )
 
@@ -216,7 +217,7 @@ class PeripheralsService:
                 self._recording_task.cancel()
                 try:
                     await self._recording_task
-                except asyncio.CancelledError:
+                except CancelledError:
                     pass
                 self._recording_task = None
 
@@ -230,20 +231,21 @@ class PeripheralsService:
                 self._button_task.cancel()
                 try:
                     await self._button_task
-                except asyncio.CancelledError:
+                except CancelledError:
                     pass
 
             if self._motion_task:
                 self._motion_task.cancel()
                 try:
                     await self._motion_task
-                except asyncio.CancelledError:
+                except CancelledError:
                     pass
 
-        self._button_service.cleanup()
-        self._motion_service.cleanup()
-        self._rgb_service.cleanup()
-        self._camera_service.cleanup()
+        await self._button_service.cleanup()
+        await self._motion_service.cleanup()
+        await self._rgb_service.cleanup()
+        await self._camera_service.cleanup()
+
 
 __all__ = [
     "ButtonService",

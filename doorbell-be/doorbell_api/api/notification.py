@@ -12,7 +12,7 @@ controller_name = "notification_controller"
 
 
 @notification_router.get(
-    "/",
+    "",
     response_model=List[NotificationDTO],
     dependencies=[Depends(OAuth2Authorized)]
 )
@@ -45,7 +45,7 @@ async def get_hits(
     return await controller.count_all()
 
 @notification_router.delete(
-    "/{model_id}/",
+    "/{model_id}",
     status_code=204,
     dependencies=[Depends(OAuth2Authorized)]
 )
@@ -58,7 +58,7 @@ async def delete_notification(
 
 
 @notification_router.delete(
-    "/",
+    "",
     status_code=204,
     dependencies=[Depends(OAuth2Authorized)]
 )

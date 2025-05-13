@@ -14,10 +14,6 @@ class CaptureService(BaseService[CaptureDTO, Capture], ICaptureService):
         super().__init__(mapper, repo)
         self._repo = repo
 
-class NotificationService(BaseService[NotificationDTO, Notification], INotificationService):
-    def __init__(self, mapper: IMapper[NotificationDTO, Notification], repo: INotificationRepository):
-        super().__init__(mapper, repo)
-        self._repo = repo
 
 class SettingsService(BaseService[SettingsDTO, Settings], ISettingsService):
     def __init__(self, mapper: IMapper[SettingsDTO, Settings], repo: ISettingsRepository):

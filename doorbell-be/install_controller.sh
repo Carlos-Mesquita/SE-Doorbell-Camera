@@ -3,9 +3,16 @@
 SERVICE_NAME="doorbell-controller"
 SERVICE_DESCRIPTION="Doorbell App Controller Service"
 WORKING_DIR="$(pwd)"
+VENV_DIR="${WORKING_DIR}/venv"
 
 USER=$(whoami)
 GROUP=$(id -gn $USER)
+
+echo "Creating Python virtual environment..."
+python3 -m venv --system-site-packages  ${VENV_DIR}
+
+echo "Installing Python dependencies..."
+${VENV_DIR}/bin/pip install -r ${WORKING_DIR}/doorbell_controller/requirements.txt
 
 echo "Creating systemd service file..."
 cat > /tmp/${SERVICE_NAME}.service << EOF
@@ -16,7 +23,7 @@ Wants=network-online.target
 
 [Service]
 Environment="PYTHONPATH=${WORKING_DIR}"
-ExecStart=/usr/bin/python3 -m doorbell_controller
+ExecStart=${VENV_DIR}/bin/python -m doorbell_controller
 WorkingDirectory=${WORKING_DIR}
 User=${USER}
 Group=${GROUP}
@@ -30,8 +37,6 @@ SyslogIdentifier=${SERVICE_NAME}
 [Install]
 WantedBy=multi-user.target
 EOF
-
-chmod +x ${WORKING_DIR}/doorbell_controller/__init__.py
 
 sudo mv /tmp/${SERVICE_NAME}.service /etc/systemd/system/
 

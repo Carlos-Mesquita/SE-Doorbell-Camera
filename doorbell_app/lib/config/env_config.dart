@@ -1,0 +1,29 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+enum Environment {
+  local,
+  staging,
+}
+
+class EnvConfig {
+  static Future init({Environment env = Environment.local}) async {
+    String fileName;
+
+    switch (env) {
+      case Environment.local:
+        fileName = '.env.local';
+        break;
+      case Environment.staging:
+        fileName = '.env.staging';
+        break;
+    }
+
+    await dotenv.load(fileName: fileName);
+  }
+
+  static String get apiUrl => dotenv.env['API_URL'] ?? 'http://localhost:8000/api';
+  // Fallback to google's stun server
+  static String get turnHost => dotenv.env['TURN_HOST'] ?? 'stun.l.google.com';
+  static String? get turnSecret => dotenv.env['TURN_SECRET'];
+  static String get signalingWebsocket =>  dotenv.env['SIGNALING_WS'] ?? 'ws://localhost:8000/api/ws/webrtc';
+}
