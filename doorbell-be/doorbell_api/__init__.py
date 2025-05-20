@@ -4,10 +4,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from firebase_admin import credentials
 
-from doorbell_api.api import router
-from doorbell_api.configs import DependencyInjector
-from doorbell_api.middlewares import setup_middlewares
-from doorbell_api.exceptions import setup_exception_handlers
+from .api import router
+from .configs import DependencyInjector
+from .middlewares import setup_middlewares
+from .exceptions import setup_exception_handlers
 
 
 

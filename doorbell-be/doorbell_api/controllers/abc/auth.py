@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from doorbell_api.dtos import UserCredentialsDTO
+from ...dtos import UserCredentialsDTO
 
 
 class IAuthController(ABC):

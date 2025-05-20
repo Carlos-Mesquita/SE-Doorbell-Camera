@@ -15,6 +15,7 @@ class Event(BaseModel, Generic[EventType]):
     type: EventType
     id: str = Field(default_factory=lambda: str(uuid4()))
     timestamp: datetime = Field(default_factory=datetime.now)
+    source_device_id: Optional[str] = None
     payload: Optional[Dict[str, any]] = None
 
 from .sensor import SensorEvent

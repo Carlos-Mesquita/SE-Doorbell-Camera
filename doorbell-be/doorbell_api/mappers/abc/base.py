@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Optional, Generic, Dict, List
 from pydantic import BaseModel
-from doorbell_api.configs.db import Base
+from ...configs.db import Base
 
 TDTO = TypeVar('TDTO', bound=BaseModel)
 TORM = TypeVar('TORM', bound=Base)

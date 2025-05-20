@@ -1,7 +1,7 @@
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from doorbell_api.configs.db import Base, TimestampMixin
+from ..configs.db import Base, TimestampMixin
 
 
 class User(Base, TimestampMixin):

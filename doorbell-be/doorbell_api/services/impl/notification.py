@@ -1,38 +1,76 @@
 from logging import getLogger
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from firebase_admin import messaging
-
 from doorbell_api.dtos import NotificationDTO
 from doorbell_api.models import Notification
-from doorbell_api.services import INotificationService
+from doorbell_api.services import INotificationService, IDeviceService
 from doorbell_api.repositories import INotificationRepository
-
 from doorbell_api.mappers import IMapper
-
 from .base import BaseService
 
+
 class NotificationService(BaseService[NotificationDTO, Notification], INotificationService):
-    def __init__(self, mapper: IMapper[NotificationDTO, Notification], repo: INotificationRepository):
+    def __init__(self,
+        mapper: IMapper[NotificationDTO, Notification],
+        repo: INotificationRepository,
+        device_service: IDeviceService
+    ):
         super().__init__(mapper, repo)
         self._repo = repo
+        self._device_service = device_service
         self._logger = getLogger(__name__)
 
-    async def create_notification(self, message: Dict[str, Any]):
-        notification_dto = await super().create(NotificationDTO(**message))
-        self._send_to_fcm(notification_dto.model_dump_json())
-
-    def _send_to_fcm(self, notification_data: Dict[str, Any], token: str):
+    async def create_notification(self, notification_payload_dict: Dict[str, Any], user_id_for_fcm_lookup: Optional[int]) -> Optional[Dict[str, Any]]:
         try:
-            fcm_message = messaging.Message(
-                notification=messaging.Notification(
-                    title=notification_data.get("title"),
-                ),
-                data=notification_data,
-                token=token,
+            if 'user_id' not in notification_payload_dict and user_id_for_fcm_lookup:
+                notification_payload_dict['user_id'] = str(user_id_for_fcm_lookup)
+
+            notification_dto = NotificationDTO(**notification_payload_dict)
+            created_dto_from_db = await super().create(notification_dto)
+
+            self._logger.info(
+                f"Notification DB record created: ID {created_dto_from_db.id} for RPi Event ID {created_dto_from_db.rpi_event_id}"
             )
 
-            response = messaging.send(fcm_message)
+            if user_id_for_fcm_lookup:
+                fcm_tokens = await self._device_service.get_fcm_tokens_for_user(user_id_for_fcm_lookup)
+                if fcm_tokens:
+                    self._logger.info(
+                        f"Found {len(fcm_tokens)} FCM tokens for user {user_id_for_fcm_lookup}. Sending notifications.")
+
+                    fcm_data_payload = {
+                        k: str(v) for k, v in
+                        created_dto_from_db.model_dump(exclude_none=True, by_alias=False).items() if
+                        v is not None
+                    }
+                    title_for_fcm = str(notification_payload_dict.get("title", "Doorbell Alert"))
+
+                    for token in fcm_tokens:
+                        self._send_to_fcm(
+                            title=title_for_fcm,
+                            data_payload=fcm_data_payload,
+                            device_token=token
+                        )
+                else:
+                    self._logger.info(f"No active FCM tokens found for user {user_id_for_fcm_lookup}.")
+            else:
+                self._logger.warning("No user_id_for_fcm_lookup provided to create_notification, cannot send FCM.")
+
+            return created_dto_from_db.model_dump(exclude_none=True, by_alias=False)
+        except Exception as e:
+            self._logger.error(f"Error in NotificationService.create_notification: {e}", exc_info=True)
+            return None
+
+    def _send_to_fcm(self, title: str, data_payload: Dict[str, str], device_token: str):
+        try:
+            message = messaging.Message(
+                notification=messaging.Notification(title=title),
+                data=data_payload,
+                token=device_token,
+            )
+            response = messaging.send(message)
+            self._logger.info(f"FCM message sent to token {device_token[:10]}... Response: {response}")
             return response
         except Exception as e:
-            self._logger.error(f"Error sending FCM notification: {e}")
+            self._logger.error(f"Error sending FCM to token {device_token[:10]}...: {e}", exc_info=True)
             return None

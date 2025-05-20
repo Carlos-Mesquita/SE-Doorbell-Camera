@@ -1,8 +1,8 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Cookie
 
-from doorbell_api.controllers import IAuthController
-from doorbell_api.dtos import UserCredentialsDTO
+from ..controllers import IAuthController
+from ..dtos import UserCredentialsDTO
 
 controller = "auth_controller"
 auth_router = APIRouter()

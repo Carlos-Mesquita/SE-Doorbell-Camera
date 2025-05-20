@@ -10,7 +10,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('doorbell_camera.db');
+    _database = await _initDB('doorbell_camera_v2.db');
     return _database!;
   }
 
@@ -20,8 +20,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _onUpgradeDB,
     );
   }
 
@@ -30,41 +31,71 @@ class DatabaseHelper {
       CREATE TABLE notifications(
         id INTEGER PRIMARY KEY,
         title TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        captures TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        duration INTEGER NOT NULL
+        created_at TEXT NOT NULL,
+        captures_json TEXT,
+        rpi_event_id TEXT,
+        type_str TEXT,
+        user_id TEXT
       )
     ''');
   }
 
+  Future _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute("DROP TABLE IF EXISTS notifications");
+      await _createDB(db, newVersion);
+      print("Database upgraded to version $newVersion (old table dropped and recreated).");
+    }
+  }
+
   Future<int> insertNotification(Notification notification) async {
     final db = await database;
-    return await db.insert('notifications', notification.toMap());
+    Map<String, dynamic> row = notification.toDbMap();
+
+    return await db.insert('notifications', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Notification>> getNotifications() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notifications',
-      orderBy: 'timestamp DESC'
+      orderBy: 'created_at DESC'
     );
+
+    if (maps.isEmpty) {
+      return [];
+    }
     return List.generate(maps.length, (i) {
       return Notification.fromMap(maps[i]);
     });
   }
 
-  Future<void> deleteNotification(int id) async {
+  Future<int> deleteNotification(int serverNotificationId) async {
     final db = await database;
-    await db.delete(
+    return await db.delete(
       'notifications',
       where: 'id = ?',
-      whereArgs: [id],
+      whereArgs: [serverNotificationId],
     );
   }
 
-  Future<void> clearNotifications() async {
+  Future<int> clearNotifications() async {
     final db = await database;
-    await db.delete('notifications');
+    return await db.delete('notifications');
+  }
+
+  Future<Notification?> getNotificationById(int serverNotificationId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notifications',
+      where: 'id = ?',
+      whereArgs: [serverNotificationId],
+      limit: 1,
+    );
+
+    if (maps.isNotEmpty) {
+      return Notification.fromMap(maps.first);
+    }
+    return null;
   }
 }

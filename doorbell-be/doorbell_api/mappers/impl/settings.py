@@ -1,6 +1,6 @@
 from typing import Dict, Any
-from doorbell_api.models import Settings
-from doorbell_api.dtos.settings import (
+from ...models import Settings
+from ...dtos.settings import (
     SettingsDTO, ButtonConfig, MotionSensorConfig,
     CameraConfig, ColorConfig, StopMotionConfig
 )

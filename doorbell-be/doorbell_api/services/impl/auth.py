@@ -3,11 +3,11 @@ from datetime import datetime, timedelta
 from typing import Tuple, Optional, Dict, Any
 from uuid import UUID, uuid4
 
-from doorbell_api.dtos import UserCredentialsDTO
-from doorbell_api.exceptions import ExpiredTokenException, UnauthorizedException
-from doorbell_api.helpers import TokenHelper
-from doorbell_api.repositories import IUserRepository
-from doorbell_api.services import IAuthService, ITokenService
+from ...dtos import UserCredentialsDTO
+from ...exceptions import ExpiredTokenException, UnauthorizedException
+from ...helpers import TokenHelper
+from ...repositories import IUserRepository
+from ...services import IAuthService, ITokenService
 
 
 class AuthService(IAuthService):
@@ -72,14 +72,14 @@ class AuthService(IAuthService):
             pwd.encode('utf-8')
         )
 
-    async def authenticate_user(self, creds: UserCredentialsDTO) -> str:
+    async def authenticate_user(self, creds: UserCredentialsDTO) -> int:
         user = await self._user_repo.get_by_email(creds.email)
         if not user or not self._verify_password(creds.password, user.password):
             raise UnauthorizedException
-        return str(user.id)
+        return int(user.id)
 
     async def revoke_refresh_token(self, refresh_token: str):
         await self._token_service.revoke_refresh_token(UUID(refresh_token))
 
-    async def decode_token(self, token: str, refresh: bool = False) -> Optional[str]:
-        return TokenHelper.decode(token=token, refresh=refresh, config=self._config)["id"]
+    async def decode_token(self, token: str, refresh: bool = False) -> Dict[str, Any]:
+        return TokenHelper.decode(token=token, refresh=refresh, config=self._config)

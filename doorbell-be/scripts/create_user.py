@@ -25,7 +25,7 @@ async def create_user():
 
     current_time = datetime.now()
 
-    env = os.environ.get('ENV', 'LOCAL').upper()
+    env = os.environ.get('ENV', 'DEV').upper()
     connection_string = os.environ[f'DB_CONNECTION_STRING_{env}']
 
     conn = await asyncpg.connect(connection_string)

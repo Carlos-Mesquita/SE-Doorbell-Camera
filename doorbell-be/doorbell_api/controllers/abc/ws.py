@@ -5,11 +5,7 @@ from fastapi.websockets import WebSocket
 class IWebSocketController(ABC):
 
     @abstractmethod
-    async def process_camera(self, websocket: WebSocket, access_token: str):
-        pass
-
-    @abstractmethod
-    async def push_notifications(self, websocket: WebSocket, access_token: str):
+    async def handle_camera_events(self, websocket: WebSocket, access_token: str):
         pass
 
     @abstractmethod

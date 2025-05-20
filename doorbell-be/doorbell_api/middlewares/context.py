@@ -2,7 +2,7 @@ from logging import getLogger
 from uuid import uuid4
 
 from starlette.middleware.base import BaseHTTPMiddleware
-from doorbell_api.configs.db import set_session_context, reset_session_context, scoped_session
+from ..configs.db import set_session_context, reset_session_context, scoped_session
 from starlette.requests import Request
 
 logger = getLogger(__name__)

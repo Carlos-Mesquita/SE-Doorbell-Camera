@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Dict, Any
+
 
 class ICamera(ABC):
 
@@ -11,7 +13,7 @@ class ICamera(ABC):
         pass
 
     @abstractmethod
-    def begin_stop_motion(self, e_id: str):
+    def begin_stop_motion(self):
         pass
 
     @abstractmethod
@@ -36,4 +38,16 @@ class ICamera(ABC):
     @interval.setter
     @abstractmethod
     def interval(self, value: float):
+        pass
+
+    @abstractmethod
+    async def get_streaming_status(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def set_stop_motion_interval(self, value_seconds: float) -> None:
+        pass
+
+    @abstractmethod
+    async def get_stop_motion_interval(self) -> float:
         pass

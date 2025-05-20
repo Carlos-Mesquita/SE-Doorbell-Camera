@@ -1,10 +1,10 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Query, Path
 from typing import List, Optional
-from doorbell_api.dtos import NotificationDTO
-from doorbell_api.controllers import INotificationController
-from doorbell_api.dtos import HitsDTO
-from doorbell_api.middlewares import OAuth2Authorized
+from ..dtos import NotificationDTO
+from ..controllers import INotificationController
+from ..dtos import HitsDTO
+from ..middlewares import OAuth2Authorized
 
 notification_router = APIRouter()
 
@@ -31,18 +31,6 @@ async def get_all_notifications(
         "sort_order": sort_order
     }
     return await controller.get_all(**pagination)
-
-
-@notification_router.get(
-    "/count",
-    response_model=HitsDTO,
-    dependencies=[Depends(OAuth2Authorized)]
-)
-@inject
-async def get_hits(
-    controller: INotificationController = Depends(Provide[controller_name])
-):
-    return await controller.count_all()
 
 @notification_router.delete(
     "/{model_id}",

@@ -4,6 +4,7 @@ from .base import IBaseService
 from .crud import ICaptureService, INotificationService, ISettingsService
 from .msg_handler import IMessageHandler
 from .signaling import IWebRTCSignalingService
+from .device import IDeviceService
 
 __all__ = [
     'ICaptureService',
@@ -13,5 +14,6 @@ __all__ = [
     'ITokenService',
     'IBaseService',
     'IMessageHandler',
-    'IWebRTCSignalingService'
+    'IWebRTCSignalingService',
+    'IDeviceService'
 ]

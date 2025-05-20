@@ -1,7 +1,7 @@
 import jwt
 from datetime import datetime
 
-from doorbell_api.exceptions import DecodeTokenException, ExpiredTokenException
+from ..exceptions import DecodeTokenException, ExpiredTokenException
 
 
 class TokenHelper:

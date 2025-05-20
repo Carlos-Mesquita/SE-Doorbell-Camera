@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-
+/*
 class ErrorPage extends StatelessWidget {
-  const ErrorPage({super.key});
+  final String errorMessage;
+
+  const ErrorPage({super.key, required this.errorMessage});
 
   @override
   Widget build(BuildContext context) {
@@ -17,11 +19,10 @@ class ErrorPage extends StatelessWidget {
             children: [
               const Icon(Icons.error_outline, size: 80, color: Colors.red),
               const SizedBox(height: 20),
-              const Text(
-                'Ocorreu um problema ao tentar conectar à câmara.\n'
-                'Por favor, verifique a ligação e tente novamente.',
+              Text(
+                errorMessage,  // Remove const here
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18),
+                style: const TextStyle(fontSize: 18),
               ),
               const SizedBox(height: 30),
               ElevatedButton(
@@ -37,3 +38,4 @@ class ErrorPage extends StatelessWidget {
     );
   }
 }
+*/

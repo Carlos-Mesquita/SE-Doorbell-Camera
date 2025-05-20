@@ -4,6 +4,7 @@ from .notification import NotificationService
 from .crud import CaptureService, SettingsService
 from .msg_handler import MessageHandler
 from .signaling import WebRTCSignalingService
+from .device import DeviceService
 
 __all__ = [
     'AuthService',
@@ -12,5 +13,6 @@ __all__ = [
     'NotificationService',
     'SettingsService',
     'MessageHandler',
-    'WebRTCSignalingService'
+    'WebRTCSignalingService',
+    'DeviceService',
 ]

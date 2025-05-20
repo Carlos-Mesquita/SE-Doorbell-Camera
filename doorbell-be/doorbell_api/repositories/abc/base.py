@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, TypeVar, Generic, Optional, Tuple, Any
-from doorbell_api.configs.db import Base
+from ...configs.db import Base
 
 TModel = TypeVar('TModel', bound=Base)
 

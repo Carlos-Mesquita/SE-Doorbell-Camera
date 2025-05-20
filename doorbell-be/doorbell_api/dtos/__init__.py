@@ -5,6 +5,7 @@ from .settings import SettingsDTO
 from .creds import UserCredentialsDTO
 from .hits import HitsDTO
 from .webrtc import ClientInfo, RoomInfo
+from .device_registration import FCMDeviceRegistrationDTO
 
 __all__ = [
     'TokenDTO',
@@ -15,4 +16,5 @@ __all__ = [
     'HitsDTO',
     'ClientInfo',
     'RoomInfo',
+    'FCMDeviceRegistrationDTO'
 ]

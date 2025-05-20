@@ -42,6 +42,7 @@ class AuthBackend(AuthenticationBackend):
 
                 user_id = payload.get('id')
                 creds = AuthCredentials(['bearer'])
+                user.identity = user_id
 
             except jwt.exceptions.PyJWTError:
                 return unauthenticated, user

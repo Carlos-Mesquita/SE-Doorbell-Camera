@@ -6,7 +6,7 @@ enum Environment {
 }
 
 class EnvConfig {
-  static Future init({Environment env = Environment.local}) async {
+  static Future init({Environment env = Environment.staging}) async {
     String fileName;
 
     switch (env) {
@@ -26,4 +26,5 @@ class EnvConfig {
   static String get turnHost => dotenv.env['TURN_HOST'] ?? 'stun.l.google.com';
   static String? get turnSecret => dotenv.env['TURN_SECRET'];
   static String get signalingWebsocket =>  dotenv.env['SIGNALING_WS'] ?? 'ws://localhost:8000/api/ws/webrtc';
+  static String get captureBase  =>  dotenv.env['CAPTURES'] ?? 'https://doorbell.cmesquita.com/captures/';
 }

@@ -1,9 +1,9 @@
 from .base import BaseController
-from doorbell_api.dtos import NotificationDTO, CaptureDTO, SettingsDTO
-from doorbell_api.controllers import (
+from ...dtos import NotificationDTO, CaptureDTO, SettingsDTO
+from ...controllers import (
     INotificationController, ICaptureController, ISettingsController
 )
-from doorbell_api.services import INotificationService, ICaptureService, ISettingsService
+from ...services import INotificationService, ICaptureService, ISettingsService
 
 class NotificationController(BaseController[NotificationDTO], INotificationController):
     def __init__(self, service: INotificationService):

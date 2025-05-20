@@ -3,10 +3,10 @@ from typing import TypeVar, List, Dict, Generic, Any, Optional
 from pydantic import BaseModel
 from sqlalchemy.exc import NoResultFound
 
-from doorbell_api.controllers import IBaseController
-from doorbell_api.dtos.hits import HitsDTO
-from doorbell_api.exceptions import CatchesAndThrows, NotFoundException
-from doorbell_api.services import IBaseService
+from ...controllers import IBaseController
+from ...dtos.hits import HitsDTO
+from ...exceptions import CatchesAndThrows, NotFoundException
+from ...services import IBaseService
 
 TDTO = TypeVar('TDTO', bound=BaseModel)
 

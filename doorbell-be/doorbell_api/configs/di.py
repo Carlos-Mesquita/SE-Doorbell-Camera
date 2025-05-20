@@ -1,7 +1,7 @@
 from asyncio import Queue
 
 from dependency_injector import providers, containers
-from doorbell_api.configs.db import scoped_session
+from ..configs.db import scoped_session
 
 
 class DependencyInjector:
@@ -32,13 +32,11 @@ class DependencyInjector:
         self._container.config.jwt.access.expires.from_env("JWT_ACCESS_TOKEN_EXPIRE", required=True)
 
     def _setup_shared_instances(self):
-        from doorbell_api.services.impl import WebRTCSignalingService
-
-        self._container.message_queue = providers.Singleton(Queue)
+        from ..services.impl import WebRTCSignalingService
         self._container.signaling_service = providers.Singleton(WebRTCSignalingService)
 
     def _setup_mappers(self):
-        from doorbell_api.mappers.impl import (
+        from ..mappers.impl import (
             CaptureMapper, NotificationMapper, SettingsMapper
         )
         self._container.capture_mapper = providers.Singleton(CaptureMapper)
@@ -46,9 +44,9 @@ class DependencyInjector:
         self._container.settings_mapper = providers.Singleton(SettingsMapper)
 
     def _setup_repositories(self):
-        from doorbell_api.repositories.impl import (
+        from ..repositories.impl import (
             TokenRepository, UserRepository, CaptureRepository,
-            SettingsRepository, NotificationRepository
+            SettingsRepository, NotificationRepository, FCMDeviceRepository
         )
 
         self._container.db_session = providers.Factory(
@@ -69,16 +67,15 @@ class DependencyInjector:
         self._container.notification_repo = providers.Factory(
             NotificationRepository, db_session=self._container.db_session
         )
-
-    def _setup_services(self):
-        from doorbell_api.services.impl import (
-            AuthService, TokenService, CaptureService,
-            SettingsService, NotificationService,
-            WebRTCSignalingService, MessageHandler
+        self._container.fcm_device_repo = providers.Factory(
+            FCMDeviceRepository, db_session=self._container.db_session
         )
 
-        self._container.signaling_service = providers.Singleton(
-            WebRTCSignalingService
+    def _setup_services(self):
+        from ..services.impl import (
+            AuthService, TokenService, CaptureService,
+            SettingsService, NotificationService,
+            MessageHandler, DeviceService
         )
 
         self._container.token_service = providers.Factory(
@@ -91,12 +88,23 @@ class DependencyInjector:
         self._container.settings_service = providers.Factory(
             SettingsService, mapper=self._container.settings_mapper, repo=self._container.settings_repo
         )
+        self._container.device_service = providers.Factory(
+            DeviceService, fcm_device_repo=self._container.fcm_device_repo
+        )
+
         self._container.notification_service = providers.Factory(
-            NotificationService, mapper=self._container.notification_mapper, repo=self._container.notification_repo
+            NotificationService,
+            mapper=self._container.notification_mapper,
+            repo=self._container.notification_repo,
+            device_service=self._container.device_service
         )
 
         self._container.message_handler = providers.Factory(
-            MessageHandler, notification_service=self._container.notification_service
+            MessageHandler,
+            notification_service=self._container.notification_service,
+            capture_service=self._container.capture_service,
+            notification_repo=self._container.notification_repo,
+            captures_base_dir='/opt/captures'
         )
 
         self._container.auth_service = providers.Factory(
@@ -107,7 +115,7 @@ class DependencyInjector:
         )
 
     def _setup_controllers(self):
-        from doorbell_api.controllers.impl import (
+        from ..controllers.impl import (
             AuthController, CaptureController,
             SettingsController, NotificationController,
             WebsocketController
@@ -127,8 +135,8 @@ class DependencyInjector:
         )
 
         self._container.ws_controller = providers.Factory(
-            WebsocketController, auth_service=self._container.auth_service,
+            WebsocketController,
+            auth_service=self._container.auth_service,
             message_handler=self._container.message_handler,
-            signaling_service=self._container.signaling_service,
-            message_queue=self._container.message_queue
+            signaling_service=self._container.signaling_service
         )

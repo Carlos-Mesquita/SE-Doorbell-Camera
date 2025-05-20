@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from doorbell_api.configs.db import Base, TimestampMixin
+from ..configs.db import Base, TimestampMixin
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import DateTime

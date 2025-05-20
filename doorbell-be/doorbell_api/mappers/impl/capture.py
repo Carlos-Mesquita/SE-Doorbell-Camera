@@ -1,5 +1,5 @@
-from doorbell_api.models import Capture
-from doorbell_api.dtos import CaptureDTO
+from ...models import Capture
+from ...dtos import CaptureDTO
 
 from .base import Mapper
 

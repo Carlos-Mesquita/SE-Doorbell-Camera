@@ -1,8 +1,8 @@
 from fastapi.responses import JSONResponse, Response
 
-from doorbell_api.controllers import IAuthController
-from doorbell_api.dtos import UserCredentialsDTO
-from doorbell_api.services import IAuthService
+from ...controllers import IAuthController
+from ...dtos import UserCredentialsDTO
+from ...services import IAuthService
 
 
 class AuthController(IAuthController):

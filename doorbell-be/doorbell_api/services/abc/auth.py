@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, TYPE_CHECKING
+from typing import Tuple, Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
-    from doorbell_api.dtos import UserCredentialsDTO
+    from ...dtos import UserCredentialsDTO
 
 
 class IAuthService(ABC):
@@ -25,5 +25,5 @@ class IAuthService(ABC):
 
     @staticmethod
     @abstractmethod
-    async def decode_token(access_token: str, refresh: bool = False) -> str:
+    async def decode_token(access_token: str, refresh: bool = False) -> Dict[str, Any]:
         pass

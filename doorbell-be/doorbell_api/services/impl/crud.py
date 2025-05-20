@@ -1,10 +1,10 @@
-from doorbell_api.dtos import CaptureDTO, NotificationDTO, SettingsDTO
-from doorbell_api.models import Capture, Notification, Settings
-from doorbell_api.services import ICaptureService, INotificationService, ISettingsService
-from doorbell_api.repositories import (
+from ...dtos import CaptureDTO, NotificationDTO, SettingsDTO
+from ...models import Capture, Notification, Settings
+from ...services import ICaptureService, INotificationService, ISettingsService
+from ...repositories import (
     ICaptureRepository, INotificationRepository, ISettingsRepository
 )
-from doorbell_api.mappers import IMapper
+from ...mappers import IMapper
 
 from .base import BaseService
 

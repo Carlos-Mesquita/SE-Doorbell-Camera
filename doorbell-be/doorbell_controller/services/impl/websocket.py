@@ -2,9 +2,10 @@ import json
 import asyncio
 import websockets
 
-from asyncio import create_task, CancelledError, Future, wait_for, iscoroutine
+from asyncio import CancelledError, Future, wait_for, \
+    iscoroutine
 from logging import getLogger
-from typing import Dict, List, Callable, Optional, Union, Awaitable
+from typing import Dict, List, Callable, Optional, Union, Awaitable, Any
 
 from doorbell_shared.models import Message, MessageType
 
@@ -12,145 +13,176 @@ from doorbell_shared.models import Message, MessageType
 class WebSocketClient:
 
     def __init__(self, ws_url: str, ws_endpoint: str, token: str, message_handler=True):
-        self._ws_url = f"{ws_url}/{ws_endpoint}"
+        self._base_ws_url = ws_url
+        self._ws_endpoint = ws_endpoint
         self._token = token
         self.connected = False
-        self._message_handlers: Dict[MessageType, List[Callable]] = {}
+        self._message_handlers: Dict[MessageType, List[Callable[[Message], Union[None, Awaitable[None]]]]] = {}
         self._response_futures: Dict[str, Future[Message]] = {}
         self._logger = getLogger(__name__)
-        self._ws = None
-        self._task = None
-        self._message_handler = message_handler
+        self._ws: Optional[Any] = None
+        self._listener_task: Optional[asyncio.Task] = None
+        self._should_run_message_handler = message_handler
 
     def register_handler(self, msg_type: MessageType, handler: Callable[[Message], Union[None, Awaitable[None]]]):
-        """
-        Register a message handler that can be either synchronous or asynchronous.
-
-        Args:
-            msg_type: Type of message to handle
-            handler: Function to call with message (can be a coroutine function)
-        """
+        if not isinstance(msg_type, MessageType):
+            self._logger.error(f"Attempted to register handler for non-MessageType: {msg_type}")
+            return
         if msg_type not in self._message_handlers:
             self._message_handlers[msg_type] = []
         self._message_handlers[msg_type].append(handler)
 
-    async def _handle_message(self, message: Message):
-        """
-        Handle an incoming message.
+    async def _handle_message(self, message_str: str):  # CHANGED: takes string, parses here
+        try:
+            msg_obj = Message(**json.loads(message_str))
+        except json.JSONDecodeError:
+            self._logger.error(f"Failed to decode JSON message: {message_str}")
+            return
+        except Exception as e:
+            self._logger.error(f"Error creating Message object from JSON: {e} - Data: {message_str}")
+            return
 
-        Args:
-            message: Message to handle
-        """
-        # Handle response futures first
-        if message.reply_to and message.reply_to in self._response_futures:
-            future = self._response_futures.pop(message.reply_to)
-            future.set_result(message)
+        if msg_obj.reply_to and msg_obj.reply_to in self._response_futures:
+            future = self._response_futures.pop(msg_obj.reply_to)
+            if not future.done():
+                future.set_result(msg_obj)
+            else:
+                self._logger.warning(f"Future for {msg_obj.reply_to} was already done.")
 
-        # Then handle registered handlers
-        if message.msg_type in self._message_handlers:
-            for handler in self._message_handlers[message.msg_type]:
+        if msg_obj.msg_type in self._message_handlers:
+            for handler in self._message_handlers[msg_obj.msg_type]:
                 try:
-                    result = handler(message)
-                    # Check if the handler is a coroutine and await it if so
+                    result = handler(msg_obj)
                     if iscoroutine(result):
                         await result
                 except Exception as e:
-                    self._logger.error(f"Error in message handler: {e}")
+                    self._logger.error(f"Error in message handler for {msg_obj.msg_type}: {e}", exc_info=True)
 
-    async def connect(self):
-        self._logger.info(f"Connecting to {self._ws_url}")
-        self._ws = await websockets.connect(f"{self._ws_url}?token={self._token}")
+
+    async def connect(self) -> Optional[asyncio.Task]:
+        if self.connected:
+            self._logger.info("Already connected.")
+            return self._listener_task
+
+        full_ws_url = f"{self._base_ws_url}/{self._ws_endpoint}?token={self._token}"
+        self._logger.info(f"Connecting to {full_ws_url}")
+        try:
+            self._ws = await websockets.connect(full_ws_url, open_timeout=10)  # type: ignore
+        except Exception as e:
+            self._logger.error(f"Failed to connect to {full_ws_url}: {e}")
+            self.connected = False
+            self._ws = None
+            return None
 
         self._logger.info("Connected and authenticated successfully")
         self.connected = True
 
-        if self._message_handler:
-            self._task = asyncio.create_task(self._listener())
+        if self._should_run_message_handler:
+            if self._listener_task and not self._listener_task.done():
+                self._listener_task.cancel()  # Cancel previous listener if any
+            self._listener_task = asyncio.create_task(self._listener(), name=f"WSListener_{self._ws_endpoint}")
+            return self._listener_task
         else:
-            return self._ws
+            self._logger.warning(
+                "WebSocketClient created with message_handler=False. Raw WebSocket returned from connect().")
+            return None
 
     async def _listener(self):
-        """Listen for incoming messages."""
         try:
-            while self.connected and self._ws.open:
+            while self.connected and self._ws and self._ws.open:
                 try:
-                    message = await self._ws.recv()
-                    msg_obj = Message(**json.loads(message))
-                    await self._handle_message(msg_obj)
-                except websockets.exceptions.ConnectionClosed:
-                    self._logger.warning("WebSocket connection closed")
-                    self.connected = False
+                    message_str = await self._ws.recv()
+                    await self._handle_message(message_str)
+                except websockets.exceptions.ConnectionClosedOK:
+                    self._logger.info("WebSocket connection closed normally.")
                     break
+                except websockets.exceptions.ConnectionClosedError as e:
+                    self._logger.warning(f"WebSocket connection closed with error: {e}")
+                    break
+                except CancelledError:
+                    self._logger.info("WebSocket listener task cancelled.")
+                    raise
                 except Exception as e:
-                    self._logger.error(f"Error processing message: {e}")
+                    self._logger.error(f"Error processing message in listener: {e}", exc_info=True)
+                    if not self.connected or not (self._ws and self._ws.open):  # Double check connection state
+                        break
         except CancelledError:
-            self._logger.info("WebSocket listener task cancelled")
+            self._logger.info("WebSocket listener task was cancelled (outer).")
         finally:
+            self._logger.info(f"WebSocket listener for {self._ws_endpoint} stopped.")
             self.connected = False
 
     async def disconnect(self):
-        """Disconnect from the WebSocket server."""
-        if self._task:
-            self._task.cancel()
-            self._task = None
+        self._logger.info(f"Disconnecting from WebSocket server {self._base_ws_url}/{self._ws_endpoint}...")
+        if self._listener_task and not self._listener_task.done():
+            self._listener_task.cancel()
+            try:
+                await self._listener_task
+            except CancelledError:
+                self._logger.info("Listener task successfully cancelled during disconnect.")
+            except Exception as e:
+                self._logger.error(f"Error waiting for listener task during disconnect: {e}", exc_info=True)
+        self._listener_task = None
 
-        if self._ws:
-            await self._ws.close()
-            self._ws = None
+        if self._ws and self._ws.open:
+            try:
+                await self._ws.close()
+                self._logger.info("WebSocket connection closed.")
+            except Exception as e:
+                self._logger.error(f"Error closing WebSocket: {e}", exc_info=True)
 
+        self._ws = None
         self.connected = False
-        self._logger.info("Disconnected from WebSocket server")
+
+        for msg_id, future in list(self._response_futures.items()):
+            if not future.done():
+                future.cancel("WebSocket disconnected")
+            del self._response_futures[msg_id]
+        self._logger.info(f"Disconnected from WebSocket server {self._base_ws_url}/{self._ws_endpoint}.")
 
     async def send_message(self, message: Message):
-        """
-        Send a message to the server.
-
-        Args:
-            message: Message to send
-        """
-        if not self.connected or not self._ws:
+        if not self.connected or not self._ws or not self._ws.open:
+            self._logger.error("Not connected to server, cannot send message.")
             raise ConnectionError("Not connected to server")
 
-        await self._ws.send(message.model_dump_json())
+        try:
+            await self._ws.send(message.model_dump_json())
+        except websockets.exceptions.ConnectionClosed:
+            self._logger.error("Failed to send message: Connection closed.")
+            self.connected = False
+            raise ConnectionError("Connection closed while sending message")  # Re-raise
+        except Exception as e:
+            self._logger.error(f"Error sending message: {e}", exc_info=True)
+            raise
 
     async def send_and_wait_response(
             self,
             message: Message,
-            expected_type: Optional[MessageType] = None,
             timeout: float = 10.0
     ) -> Message:
-        """
-        Send a message and wait for a response.
-
-        Args:
-            message: Message to send
-            expected_type: Expected type of response
-            timeout: Timeout in seconds
-
-        Returns:
-            Response message
-        """
-        if not self.connected or not self._ws:
+        if not self.connected or not self._ws or not self._ws.open:
+            self._logger.error("Not connected to server, cannot send message and wait for response.")
             raise ConnectionError("Not connected to server")
 
-        # Create a future to store the response
-        future = Future()
+        future: Future[Message] = asyncio.get_running_loop().create_future()
         self._response_futures[message.msg_id] = future
 
-        # Send the message
-        await self._ws.send(message.model_dump_json())
+        try:
+            await self.send_message(message)
+        except Exception as e:
+            del self._response_futures[message.msg_id]
+            raise
 
-        # Wait for the response with timeout
         try:
             response = await wait_for(future, timeout)
-
-            # Check if the response is of the expected type
-            if expected_type and response.msg_type != expected_type:
-                self._logger.warning(
-                    f"Unexpected response type: {response.msg_type}, expected: {expected_type}"
-                )
-
             return response
         except asyncio.TimeoutError:
-            del self._response_futures[message.msg_id]
-            raise TimeoutError(f"No response received within {timeout} seconds")
+            self._logger.warning(f"Timeout waiting for response to message {message.msg_id}")
+            if message.msg_id in self._response_futures:
+                del self._response_futures[message.msg_id]
+            raise
+        except CancelledError:
+            self._logger.info(f"send_and_wait_response for {message.msg_id} cancelled.")
+            if message.msg_id in self._response_futures:
+                del self._response_futures[message.msg_id]
+            raise

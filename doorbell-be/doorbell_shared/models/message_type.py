@@ -24,5 +24,6 @@ class MessageType(enum.Enum):
     NOTIFICATION_SYNC_RESPONSE = 15
 
     CAPTURE = 16
+    CAPTURE_ACK = 17
 
-    ERROR = 17
+    ERROR = 18

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from dependency_injector.wiring import Provide, inject
 
-from doorbell_api.middlewares import OAuth2Authorized
-from doorbell_api.services import IWebRTCSignalingService
+from ..middlewares import OAuth2Authorized
+from ..services import IWebRTCSignalingService
 
 webrtc_router = APIRouter()
 controller_name = "signaling_service"

@@ -1,6 +1,6 @@
 from abc import ABC
 
-from doorbell_api.dtos import NotificationDTO, SettingsDTO, CaptureDTO
+from ...dtos import NotificationDTO, SettingsDTO, CaptureDTO
 
 from .base import IBaseController
 

@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from doorbell_api.dtos import TokenDTO
-from doorbell_api.configs.db import Transactional
-from doorbell_api.repositories import ITokenRepository
+from ...dtos import TokenDTO
+from ...configs.db import Transactional
+from ...repositories import ITokenRepository
 from doorbell_api.services import ITokenService
 
 

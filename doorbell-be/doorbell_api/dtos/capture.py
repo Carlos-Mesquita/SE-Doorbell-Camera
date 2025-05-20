@@ -6,6 +6,6 @@ from pydantic import BaseModel
 
 class CaptureDTO(BaseModel):
     id: Optional[int] = None
-    notification_id: int
+    notification_id: Optional[int] = None
     path: str
     created_at: datetime

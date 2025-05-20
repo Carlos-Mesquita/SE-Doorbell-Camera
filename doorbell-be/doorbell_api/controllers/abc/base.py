@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from typing import TypeVar, List, Dict, Generic, Any, Optional
 from pydantic import BaseModel
 
-from doorbell_api.dtos import HitsDTO
 
 TDTO = TypeVar('TDTO', bound=BaseModel)
 

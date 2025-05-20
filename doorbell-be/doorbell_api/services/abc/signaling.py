@@ -6,7 +6,7 @@ from starlette.websockets import WebSocket
 
 class IWebRTCSignalingService(ABC):
     @abstractmethod
-    async def register_client(self, client_id: str, websocket: WebSocket, user_id: str) -> None:
+    async def register_client(self, connection_id: str, websocket: WebSocket, user_id_from_token: str) -> None:
         pass
 
     @abstractmethod

@@ -1,27 +1,32 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 
+from ..dtos import FCMDeviceRegistrationDTO
+from ..services import IDeviceService
+from ..middlewares import OAuth2Authorized
+
+from dependency_injector.wiring import inject, Provide
 
 device_router = APIRouter()
-controller_name = "device_controller"
+device_service_provider_name = "device_service" 
 
-"""
-@device_router.post("/register")
-async def register_device(
-    request: DeviceRegistrationRequest,
-    current_user=Depends(get_current_user)  # Your auth dependency
+@device_router.post(
+    "/fcm/register",
+)
+@inject
+async def register_fcm_device(
+    request: Request,
+    request_data: FCMDeviceRegistrationDTO,
+    device_service: IDeviceService = Depends(Provide[device_service_provider_name])
 ):
-    if request.user_id != current_user.id:
-        raise HTTPException(status_code=403, forbidden="User ID mismatch")
-
-    # Upsert the device registration (update if exists, insert if not)
-    await db.devices.update_one(
-        {"user_id": request.user_id, "device_id": request.device_id},
-        {"$set": {
-            "fcm_token": request.fcm_token,
-            "updated_at": datetime.now()
-        }},
-        upsert=True
-    )
-
-    return {"status": "success"}
-"""
+    user_id_from_token = int(request.user.identity)
+    try:
+        await device_service.register_or_update_fcm_device(
+            user_id=user_id_from_token,
+            fcm_token=request_data.fcm_token,
+            physical_device_id=request_data.physical_device_id,
+            device_type=request_data.device_type,
+            app_version=request_data.app_version
+        )
+        return {"status": "success", "message": "FCM device registered successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to register FCM device: {str(e)}")

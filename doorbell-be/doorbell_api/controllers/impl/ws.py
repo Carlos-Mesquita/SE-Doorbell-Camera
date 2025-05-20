@@ -2,31 +2,26 @@ import asyncio
 import json
 import os
 import uuid
-
-from asyncio import Queue
 from logging import getLogger
-from typing import Coroutine, Callable, Dict, Any
-
+from typing import Coroutine, Callable, Dict, Any, Optional  # Added Optional
 from jwt import PyJWTError
 from fastapi import WebSocket, WebSocketDisconnect
 
-from doorbell_api.controllers import IWebSocketController
-from doorbell_api.exceptions import DecodeTokenException, ExpiredTokenException, ForbiddendWS
-from doorbell_api.services import IAuthService, IMessageHandler, IWebRTCSignalingService
+from ...controllers import IWebSocketController  # Adjust import
+from ...exceptions import DecodeTokenException, ExpiredTokenException, ForbiddendWS  # Adjust import
+from ...services import IAuthService, IMessageHandler, IWebRTCSignalingService  # Adjust import
+from doorbell_shared.models import Message  # Assuming this path is correct for shared models
 
 
 class WebsocketController(IWebSocketController):
-
     def __init__(self,
         auth_service: IAuthService,
         message_handler: IMessageHandler,
         signaling_service: IWebRTCSignalingService,
-        message_queue: Queue
     ):
         self._auth_service = auth_service
         self._signaling_service = signaling_service
         self._message_handler = message_handler
-        self._message_queue = message_queue
         self._logger = getLogger(__name__)
 
     async def handle_camera_events(self, websocket: WebSocket, access_token: str):
@@ -34,76 +29,111 @@ class WebsocketController(IWebSocketController):
 
     async def _handle_ws(
             self, websocket: WebSocket, access_token: str,
-            process: Callable[[any, Dict[str, any], Queue], Coroutine[Any, Any, dict[str, Any]]]
+            process: Callable[[Message, Dict[str, any]], Coroutine[Any, Any, Optional[Dict[str, Any]]]]
     ):
+        connection_id = str(uuid.uuid4())
+        client_info_str = f"{websocket.client.host}:{websocket.client.port}"  # For logging
+        self._logger.info(f"WS conn {connection_id} attempt from {client_info_str} for endpoint.")
+
         try:
             jwt_payload = await self._auth_service.decode_token(access_token)
             await websocket.accept()
+            self._logger.info(
+                f"WS conn {connection_id} accepted for user {jwt_payload.get('sub', 'unknown')} from {client_info_str}")
+
             while True:
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=int(os.getenv("WEBSOCKET_TIMEOUT")))
-                reply = await process(message, jwt_payload, self._message_queue)
-                await websocket.send_text(json.dumps(reply))
+                message_str = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=int(os.getenv("WEBSOCKET_TIMEOUT", "60"))
+                )
+                self._logger.debug(f"WS conn {connection_id} received raw: {message_str[:200]}")
+
+                try:
+                    message_obj = Message(**json.loads(message_str))
+                except (json.JSONDecodeError, Exception) as e:
+                    self._logger.warning(f"WS conn {connection_id}: Invalid message: {e} - Data: {message_str[:200]}")
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": f"Invalid message format/structure: {e}"}))
+                    continue
+
+                reply_dict = await process(message_obj, jwt_payload)
+
+                if reply_dict:
+                    await websocket.send_text(json.dumps(reply_dict))
+                    self._logger.debug(f"WS conn {connection_id} sent reply: {str(reply_dict)[:200]}")
+
         except WebSocketDisconnect:
-            # starlette takes care of this with a 1000
-            self._logger.info("WebSocket disconnected")
+            self._logger.info(f"WS conn {connection_id} from {client_info_str} disconnected.")
         except (PyJWTError, DecodeTokenException, ExpiredTokenException) as e:
-            await websocket.close(code=3000, reason=e.message)
+            self._logger.warning(f"WS conn {connection_id} auth error for {client_info_str}: {e}")
+            await websocket.close(code=3000, reason=str(e))
         except ForbiddendWS as e:
-            await websocket.close(code=3003, reason=e.message)
+            self._logger.warning(f"WS conn {connection_id} forbidden for {client_info_str}: {e}")
+            await websocket.close(code=3003, reason=str(e))
         except asyncio.TimeoutError:
+            self._logger.info(f"WS conn {connection_id} from {client_info_str} timed out.")
             await websocket.close(code=3008, reason="Connection timeout!")
         except Exception as e:
-            self._logger.error(f"WebSocket error: {str(e)}")
-            await websocket.close(code=1011, reason="Internal server error")
+            self._logger.error(f"WS conn {connection_id} from {client_info_str} unexpected error: {e}", exc_info=True)
+        finally:
+            self._logger.info(f"WS conn {connection_id} from {client_info_str} processing ended.")
 
     async def handle_signaling(self, websocket: WebSocket, access_token: str):
+        connection_id = str(uuid.uuid4())
+        client_info_str = f"{websocket.client.host}:{websocket.client.port}"
+        self._logger.info(f"WebRTC signaling conn {connection_id} attempt from {client_info_str}")
+
         try:
-            user_id = await self._auth_service.decode_token(access_token)
+            jwt_payload = await self._auth_service.decode_token(access_token)
+            user_id_from_token = jwt_payload.get('sub')
+            if not user_id_from_token:
+                raise ForbiddendWS("User identifier not found in token.")
 
             await websocket.accept()
-            client_id = str(uuid.uuid4())
+            self._logger.info(
+                f"WebRTC conn {connection_id} accepted for user {user_id_from_token} from {client_info_str}")
 
-            await self._signaling_service.register_client(client_id, websocket, user_id)
+            await self._signaling_service.register_client(connection_id, websocket, user_id_from_token)
 
             await websocket.send_text(json.dumps({
                 "type": "registered",
-                "clientId": client_id
+                "clientId": connection_id
             }))
 
-            closed = False
-            try:
-                while True:
-                    message = await asyncio.wait_for(
-                        websocket.receive_text(),
-                        timeout=int(os.getenv("WEBSOCKET_TIMEOUT", "60"))
-                    )
+            while True:
+                message_str = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=int(os.getenv("WEBSOCKET_TIMEOUT", "60"))
+                )
+                self._logger.debug(f"WebRTC conn {connection_id} received raw: {message_str[:200]}")
 
-                    try:
-                        message_data = json.loads(message)
-                        response = await self._signaling_service.handle_message(client_id, message_data)
+                try:
+                    message_data = json.loads(message_str)
+                    response = await self._signaling_service.handle_message(connection_id, message_data)
+                    if response:
                         await websocket.send_text(json.dumps(response))
-                    except json.JSONDecodeError:
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "message": "Invalid JSON format"
-                        }))
-                    except Exception as e:
-                        self._logger.error(f"Error processing message: {str(e)}")
-                        await websocket.send_text(json.dumps({
-                            "type": "error",
-                            "message": f"Error processing message: {str(e)}"
-                        }))
-            except asyncio.TimeoutError:
-                closed = True
-                await websocket.close(code=4008, reason="Connection timeout!")
-            except Exception as e:
-                self._logger.error(f"WebSocket error: {str(e)}")
-                closed = True
-                await websocket.close(code=4500, reason="Internal server error")
-            finally:
-                await self._signaling_service.unregister_client(client_id)
-                if not closed:
-                    await websocket.close(code=1000, reason="Connection closed normally")
+                        self._logger.debug(f"WebRTC conn {connection_id} sent response: {str(response)[:200]}")
+                except json.JSONDecodeError:
+                    self._logger.warning(f"WebRTC conn {connection_id}: Invalid JSON: {message_str[:200]}")
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Invalid JSON format"}))
+                except Exception as e:
+                    self._logger.error(f"WebRTC conn {connection_id}: Error processing message: {e}", exc_info=True)
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": f"Error processing message: {str(e)}"}))
 
-        except (PyJWTError, DecodeTokenException, ExpiredTokenException):
-            raise ForbiddendWS()
+        except WebSocketDisconnect:
+            self._logger.info(f"WebRTC conn {connection_id} from {client_info_str} disconnected.")
+        except (PyJWTError, DecodeTokenException, ExpiredTokenException) as e:
+            self._logger.warning(f"WebRTC conn {connection_id} auth error for {client_info_str}: {e}")
+            await websocket.close(code=3000, reason=str(e))
+        except ForbiddendWS as e:
+            self._logger.warning(f"WebRTC conn {connection_id} forbidden for {client_info_str}: {e}")
+            await websocket.close(code=3003, reason=str(e))
+        except asyncio.TimeoutError:
+            self._logger.info(f"WebRTC conn {connection_id} from {client_info_str} timed out.")
+            await websocket.close(code=4008, reason="Connection timeout!")
+        except Exception as e:
+            self._logger.error(f"WebRTC conn {connection_id} from {client_info_str} unexpected error: {e}", exc_info=True)
+        finally:
+            await self._signaling_service.unregister_client(connection_id)
+            self._logger.info(f"WebRTC conn {connection_id} from {client_info_str} processing ended and unregistered.")

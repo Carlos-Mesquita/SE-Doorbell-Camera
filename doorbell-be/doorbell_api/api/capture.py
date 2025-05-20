@@ -1,10 +1,10 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Query, Path
 from typing import List, Optional
-from doorbell_api.dtos import CaptureDTO
-from doorbell_api.controllers import ICaptureController
-from doorbell_api.dtos.hits import HitsDTO
-from doorbell_api.middlewares import OAuth2Authorized
+from ..dtos import CaptureDTO
+from ..controllers import ICaptureController
+from ..dtos.hits import HitsDTO
+from ..middlewares import OAuth2Authorized
 
 capture_router = APIRouter()
 
@@ -32,17 +32,17 @@ async def get_all_captures(
     }
     return await controller.get_all(**pagination)
 
-
-@capture_router.get(
-    "/count",
-    response_model=HitsDTO,
+@capture_router.delete(
+    "/{capture_id}",
+    status_code=204,
     dependencies=[Depends(OAuth2Authorized)]
 )
 @inject
-async def get_hits(
+async def delete_single_capture(
+    capture_id: int = Path(..., ge=1),
     controller: ICaptureController = Depends(Provide[controller_name])
 ):
-    return await controller.count_all()
+    await controller.delete_by_id(capture_id)
 
 
 @capture_router.delete(
