@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional
 
 class IDeviceService(ABC):
 
@@ -9,8 +8,6 @@ class IDeviceService(ABC):
         user_id: int,
         fcm_token: str,
         physical_device_id: str,
-        device_type: Optional[str] = None,
-        app_version: Optional[str] = None
     ) -> None:
         pass
 

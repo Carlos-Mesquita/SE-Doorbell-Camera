@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from doorbell_api.mappers.abc import IMapper
 from doorbell_api.repositories import IBaseRepository
 from doorbell_api.services import IBaseService
-from doorbell_api.configs.db import Base, Transactional
+from doorbell_api.configs.db import Base, transactional
 
 TDTO = TypeVar('TDTO', bound=BaseModel)
 TModel = TypeVar('TModel', bound=Base)
@@ -26,13 +26,13 @@ class BaseService(IBaseService[TDTO, TModel], Generic[TDTO, TModel]):
         model = await self._repo.get_model_by_id(model_id)
         return self._mapper.to_dto(model)
 
-    @Transactional()
+    @transactional
     async def create(self, dto: TDTO) -> TDTO:
         model = self._mapper.to_orm(dto)
         new_model = await self._repo.create_model(model)
         return self._mapper.to_dto(new_model)
 
-    @Transactional()
+    @transactional
     async def update_by_id(self, model_id: int, dto: TDTO) -> TDTO:
         kwargs = self._mapper.dto_kwargs(dto)
         kwargs.pop('id', None)
@@ -41,11 +41,11 @@ class BaseService(IBaseService[TDTO, TModel], Generic[TDTO, TModel]):
         updated_model = await self._repo.update_model_by_id(model_id, kwargs)
         return self._mapper.to_dto(updated_model)
 
-    @Transactional()
+    @transactional
     async def delete_by_id(self, model_id: int) -> None:
         await self._repo.delete_model_by_id(model_id)
 
-    @Transactional()
+    @transactional
     async def delete_by_ids(self, model_ids: List[int]) -> int:
         return await self._repo.delete_models_by_ids(model_ids)
 

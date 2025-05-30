@@ -50,7 +50,7 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 env = os.environ.get('ENV', 'LOCAL').upper()
-connection_string = os.environ[f'DB_CONNECTION_STRING_{env}']
+connection_string = os.environ[f'{env}_DB_CONNECTION_STRING']
 
 config.set_main_option('sqlalchemy.url', connection_string)
 

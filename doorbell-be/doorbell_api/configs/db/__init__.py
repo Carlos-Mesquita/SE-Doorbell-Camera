@@ -1,17 +1,14 @@
-from .session import Base, scoped_session, get_session, get_session_context
-from .transactional import Transactional
-from .mixins import *
-from .session import set_session_context, reset_session_context
+from .context import set_db
+from .db import DB, Base
+from .transactional import transactional
+from .timestamp_mixin import TimestampMixin
 from .base_repo import BaseRepo
 
 __all__ = [
-    'session',
-    'Transactional',
-    'get_session',
-    'set_session_context',
-    'reset_session_context',
-    'BaseRepo',
+    'set_db',
+    'DB',
+    'transactional',
+    'TimestampMixin',
     'Base',
+    'BaseRepo'
 ]
-
-__all__.extend(mixins.__all__)

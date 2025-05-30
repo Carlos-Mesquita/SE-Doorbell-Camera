@@ -12,13 +12,13 @@ class AuthService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   UserCredentials? _credentials;
 
-  String get apiUrl => EnvConfig.apiUrl;
+  String get apiUrl => EnvConfig.apiUrl!;
 
   UserCredentials? get credentials => _credentials;
 
   bool get isAuthenticated => _credentials?.accessToken != null;
 
-  Future<UserCredentials> login(String email, String password) async {
+  Future login(String email, String password) async {
     final response = await http.post(
       Uri.parse('$apiUrl/auth'),
       headers: {'Content-Type': 'application/json'},
@@ -34,10 +34,7 @@ class AuthService {
       );
 
       _credentials = UserCredentials(accessToken: data['access_token']);
-
-      //await registerDeviceForNotifications(data['access_token']);
-
-      return _credentials!;
+      await registerDeviceForNotifications(data['access_token']);
     } else {
       throw Exception(
         'Failed to login: ${response.statusCode} - ${response.body}',
@@ -90,12 +87,13 @@ class AuthService {
         final fcmToken = await FirebaseMessaging.instance.getToken();
         final deviceId = await getDeviceId();
 
-        final userId = getUserIdFromToken(refreshToken);
-
         if (fcmToken != null) {
           await http.delete(
-            Uri.parse('$apiUrl/device'),
-            body: jsonEncode({'user_id': userId, 'device_id': deviceId, 'token': refreshToken}),
+            Uri.parse('$apiUrl/fcm/register'),
+            body: jsonEncode({
+              'physical_device_id': deviceId,
+              'token': refreshToken,
+            }),
           );
         }
       }
@@ -168,20 +166,20 @@ class AuthService {
   Future<void> registerDeviceForNotifications(String authToken) async {
     try {
       final fcmToken = await FirebaseMessaging.instance.getToken();
+      final deviceId = await getDeviceId();
 
       if (fcmToken != null) {
-        final userId = getUserIdFromToken(authToken);
-
         final response = await http.post(
-          Uri.parse('$apiUrl/device/register'),
+          Uri.parse('$apiUrl/fcm/register'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $authToken',
           },
           body: jsonEncode({
-            'user_id': userId,
-            'device_id': getDeviceId(),
-            'fcm_token': fcmToken,
+            'request_data': {
+              'physical_device_id': deviceId,
+              'fcm_token': fcmToken,
+            },
           }),
         );
 

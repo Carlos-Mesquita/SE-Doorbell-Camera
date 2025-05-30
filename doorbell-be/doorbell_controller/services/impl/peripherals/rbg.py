@@ -3,12 +3,12 @@ from typing import Dict, Any
 import logging
 
 from doorbell_controller.exceptions import ConfigException
-from doorbell_controller.services import IPeripheral, IRGBService
+from doorbell_controller.services import IPeripheral, IRGB
 
 logger = logging.getLogger(__name__)
 
 
-class RGBService(IPeripheral, IRGBService):
+class RGBService(IPeripheral, IRGB):
 
     def __init__(self, config: Dict[str, Any]):
         try:

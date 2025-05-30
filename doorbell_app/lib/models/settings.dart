@@ -47,7 +47,7 @@ class StopMotionSettingsConfig {
   final double? intervalSeconds;
   final double? durationSeconds;
 
-  StopMotionSettingsConfig({this.intervalSeconds, this.durationSeconds/*, this.autoStop*/});
+  StopMotionSettingsConfig({this.intervalSeconds, this.durationSeconds});
 
   factory StopMotionSettingsConfig.fromJson(Map<String, dynamic> json) {
     return StopMotionSettingsConfig(

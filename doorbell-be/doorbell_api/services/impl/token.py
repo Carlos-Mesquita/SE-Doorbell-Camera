@@ -1,17 +1,21 @@
 from datetime import datetime
 from uuid import UUID
 
+from dependency_injector.wiring import Provide, inject
+
 from ...dtos import TokenDTO
-from ...configs.db import Transactional
+from ...configs.db import transactional
 from ...repositories import ITokenRepository
 from doorbell_api.services import ITokenService
 
 
 class TokenService(ITokenService):
-    def __init__(self, token_repo: ITokenRepository):
+
+    @inject
+    def __init__(self, token_repo: ITokenRepository = Provide['token_repo']):
         self._repository = token_repo
 
-    @Transactional()
+    @transactional
     async def store_refresh_token(self, guid: UUID, created_at: datetime, expires_at: datetime):
         token_dto = TokenDTO(
             guid=guid,
@@ -25,7 +29,7 @@ class TokenService(ITokenService):
     async def is_refresh_token_valid(self, guid: UUID) -> bool:
         return await self._repository.is_refresh_token_valid(guid)
 
-    @Transactional()
+    @transactional
     async def revoke_refresh_token(self, guid: UUID):
         await self._repository.revoke_refresh_token(guid)
 

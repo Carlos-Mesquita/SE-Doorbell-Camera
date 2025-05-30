@@ -1,18 +1,21 @@
 import logging
 from typing import Optional, List
+from dependency_injector.wiring import inject, Provide
 
-from ...configs.db import Transactional
+from ...configs.db import transactional
 from ...services import IDeviceService
 from ...repositories import IFCMDeviceRepository
 
 logger = logging.getLogger(__name__)
 
 class DeviceService(IDeviceService):
-    def __init__(self, fcm_device_repo: IFCMDeviceRepository):
+
+    @inject
+    def __init__(self, fcm_device_repo: IFCMDeviceRepository = Provide['fcm_device_repo']):
         self._fcm_device_repo = fcm_device_repo
 
 
-    @Transactional()
+    @transactional
     async def register_or_update_fcm_device(
         self,
         user_id: int,

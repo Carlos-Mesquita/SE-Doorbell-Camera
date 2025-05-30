@@ -10,7 +10,7 @@ controller_name = "signaling_service"
 
 @webrtc_router.get(
     "/rooms",
-    dependencies=[Depends(OAuth2Authorized)]
+    dependencies=[Depends(OAuth2Authorized)],
 )
 @inject
 async def get_active_rooms(

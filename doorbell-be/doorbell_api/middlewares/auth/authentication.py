@@ -40,7 +40,7 @@ class AuthBackend(AuthenticationBackend):
                     algorithms=[config['jwt']['algorithm']],
                 )
 
-                user_id = payload.get('id')
+                user_id = payload.get('sub')
                 creds = AuthCredentials(['bearer'])
                 user.identity = user_id
 

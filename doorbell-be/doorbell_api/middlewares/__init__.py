@@ -5,7 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 
 from .auth import AuthBackend, ApiKeyAuthorized, OAuth2Authorized
-from .context import SessionContextMiddleware
+from .context import ContextMiddleware
 
 def setup_middlewares() -> List[Middleware]:
     middleware = [
@@ -20,7 +20,7 @@ def setup_middlewares() -> List[Middleware]:
             AuthenticationMiddleware, # type: ignore
             backend=AuthBackend()
         ),
-        Middleware(SessionContextMiddleware) # type: ignore
+        Middleware(ContextMiddleware) # type: ignore
     ]
     return middleware
 

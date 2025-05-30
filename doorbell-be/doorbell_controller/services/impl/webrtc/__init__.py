@@ -1,9 +1,8 @@
 import logging
-import os
 from typing import Dict, Any, Optional
 
-from peer_connection_manager import PeerConnectionManager
-from signaling_client import SignalingClient
+from .peer_connection_manager import PeerConnectionManager
+from .signaling_client import SignalingClient
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +55,15 @@ class WebRTCManager:
                 if not success:
                     logger.warning("Signaling client did not disconnect cleanly.")
                     stopped_successfully = False
-                self.signaling_client = None # Clear it regardless
+                self.signaling_client = None
             else:
                 logger.info("No active signaling client to stop.")
 
 
             if self.peer_manager:
                 logger.info("Cleaning up peer manager...")
-                await self.peer_manager.cleanup() # This closes all peer connections
-                self.peer_manager = None # Clear it after cleanup
+                await self.peer_manager.cleanup()
+                self.peer_manager = None
             else:
                 logger.info("No active peer manager to clean up.")
 
@@ -88,6 +87,10 @@ class WebRTCManager:
             "active": active,
             "connections": connections_count,
             "client_id": client_id,
-            "room_id": self.signaling_client.current_room_id if self.signaling_client else None, # Assuming SignalingClient stores this
+            "room_id": self.signaling_client.current_room_id if self.signaling_client else None,
         }
         return status
+
+__all__ = [
+    "WebRTCManager"
+]

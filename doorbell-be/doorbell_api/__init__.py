@@ -1,3 +1,4 @@
+import logging
 import os
 import firebase_admin
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from .exceptions import setup_exception_handlers
 async def lifespan(_app: FastAPI):
     cred = credentials.Certificate('./doorbell_api/firebase_credentials.json')
     firebase_admin.initialize_app(cred)
+    logging.basicConfig()
     yield
 
 

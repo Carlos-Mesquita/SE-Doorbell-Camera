@@ -2,6 +2,7 @@ import bcrypt
 from datetime import datetime, timedelta
 from typing import Tuple, Optional, Dict, Any
 from uuid import UUID, uuid4
+from dependency_injector.wiring import inject, Provide
 
 from ...dtos import UserCredentialsDTO
 from ...exceptions import ExpiredTokenException, UnauthorizedException
@@ -12,8 +13,12 @@ from ...services import IAuthService, ITokenService
 
 class AuthService(IAuthService):
 
+    @inject
     def __init__(
-        self, token_service: ITokenService, user_repo: IUserRepository, config: Dict[str, Any]
+        self,
+        token_service: ITokenService = Provide['token_service'],
+        user_repo: IUserRepository = Provide['user_repo'],
+        config: Dict[str, Any] = Provide['config']
     ):
         self._token_service = token_service
         self._user_repo = user_repo
@@ -24,7 +29,7 @@ class AuthService(IAuthService):
 
         access_token = TokenHelper.encode(
             payload={
-                "id": uid,
+                "sub": str(uid)
             },
             key=self._config["jwt"]["access"]["key"],
             expire_period=(datetime.now() + timedelta(seconds=int(self._config["jwt"]["access"]["expires"]))),
@@ -40,7 +45,7 @@ class AuthService(IAuthService):
         refresh_token = TokenHelper.encode(
             payload={
                 "guid": guid.__str__(),
-                "id": uid
+                "sub": str(uid)
             },
             key=self._config["jwt"]["refresh"]["key"],
             expire_period=(created_at + timedelta(seconds=int(self._config["jwt"]["refresh"]["expires"]))),
@@ -57,7 +62,7 @@ class AuthService(IAuthService):
 
         access_token = TokenHelper.encode(
             payload={
-                "id": refresh_token_payload.get("id")
+                "sub": refresh_token_payload.get("id")
             },
             key=self._config["jwt"]["access"]["key"],
             expire_period=(datetime.now() + timedelta(seconds=int(self._config["jwt"]["access"]["expires"]))),

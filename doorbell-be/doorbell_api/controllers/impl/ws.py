@@ -1,23 +1,25 @@
 import asyncio
 import json
-import os
-import uuid
+from uuid import uuid4
 from logging import getLogger
 from typing import Coroutine, Callable, Dict, Any, Optional  # Added Optional
 from jwt import PyJWTError
 from fastapi import WebSocket, WebSocketDisconnect
+from dependency_injector.wiring import Provide, inject
 
+from ...configs.db.context import orm_session_context
 from ...controllers import IWebSocketController  # Adjust import
 from ...exceptions import DecodeTokenException, ExpiredTokenException, ForbiddendWS  # Adjust import
 from ...services import IAuthService, IMessageHandler, IWebRTCSignalingService  # Adjust import
-from doorbell_shared.models import Message  # Assuming this path is correct for shared models
+from doorbell_shared.models import Message, MessageTypeJSONEncoder  # Assuming this path is correct for shared models
 
 
 class WebsocketController(IWebSocketController):
+    @inject
     def __init__(self,
-        auth_service: IAuthService,
-        message_handler: IMessageHandler,
-        signaling_service: IWebRTCSignalingService,
+        auth_service: IAuthService = Provide['auth_service'],
+        message_handler: IMessageHandler = Provide['message_handler'],
+        signaling_service: IWebRTCSignalingService = Provide['signaling_service'],
     ):
         self._auth_service = auth_service
         self._signaling_service = signaling_service
@@ -31,7 +33,8 @@ class WebsocketController(IWebSocketController):
             self, websocket: WebSocket, access_token: str,
             process: Callable[[Message, Dict[str, any]], Coroutine[Any, Any, Optional[Dict[str, Any]]]]
     ):
-        connection_id = str(uuid.uuid4())
+        context_token = orm_session_context.set(str(uuid4()))
+        connection_id = str(uuid4())
         client_info_str = f"{websocket.client.host}:{websocket.client.port}"  # For logging
         self._logger.info(f"WS conn {connection_id} attempt from {client_info_str} for endpoint.")
 
@@ -44,7 +47,7 @@ class WebsocketController(IWebSocketController):
             while True:
                 message_str = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=int(os.getenv("WEBSOCKET_TIMEOUT", "60"))
+                    timeout=None
                 )
                 self._logger.debug(f"WS conn {connection_id} received raw: {message_str[:200]}")
 
@@ -59,7 +62,7 @@ class WebsocketController(IWebSocketController):
                 reply_dict = await process(message_obj, jwt_payload)
 
                 if reply_dict:
-                    await websocket.send_text(json.dumps(reply_dict))
+                    await websocket.send_text(json.dumps(reply_dict, cls=MessageTypeJSONEncoder))
                     self._logger.debug(f"WS conn {connection_id} sent reply: {str(reply_dict)[:200]}")
 
         except WebSocketDisconnect:
@@ -76,10 +79,12 @@ class WebsocketController(IWebSocketController):
         except Exception as e:
             self._logger.error(f"WS conn {connection_id} from {client_info_str} unexpected error: {e}", exc_info=True)
         finally:
+            orm_session_context.reset(context_token)
             self._logger.info(f"WS conn {connection_id} from {client_info_str} processing ended.")
 
     async def handle_signaling(self, websocket: WebSocket, access_token: str):
-        connection_id = str(uuid.uuid4())
+        context_token = orm_session_context.set(str(uuid4()))
+        connection_id = str(uuid4())
         client_info_str = f"{websocket.client.host}:{websocket.client.port}"
         self._logger.info(f"WebRTC signaling conn {connection_id} attempt from {client_info_str}")
 
@@ -103,7 +108,7 @@ class WebsocketController(IWebSocketController):
             while True:
                 message_str = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=int(os.getenv("WEBSOCKET_TIMEOUT", "60"))
+                    timeout=None
                 )
                 self._logger.debug(f"WebRTC conn {connection_id} received raw: {message_str[:200]}")
 
@@ -136,4 +141,5 @@ class WebsocketController(IWebSocketController):
             self._logger.error(f"WebRTC conn {connection_id} from {client_info_str} unexpected error: {e}", exc_info=True)
         finally:
             await self._signaling_service.unregister_client(connection_id)
+            orm_session_context.reset(context_token)
             self._logger.info(f"WebRTC conn {connection_id} from {client_info_str} processing ended and unregistered.")

@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, List, Dict, Generic, Any, Optional
-
+from sqlalchemy.orm import DeclarativeBase
 from pydantic import BaseModel
 
-from doorbell_api.configs.db import Base
 
 TDTO = TypeVar('TDTO', bound=BaseModel)
-TModel = TypeVar('TModel', bound=Base)
+TModel = TypeVar('TModel', bound=DeclarativeBase)
 
 
 class IBaseService(ABC, Generic[TDTO, TModel]):

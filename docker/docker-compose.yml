@@ -1,5 +1,4 @@
 services:
-  # Before running compose up, export all variables and then run generate_confs.sh
   nginx:
     image: nginx:alpine
     ports:
@@ -16,6 +15,50 @@ services:
     network_mode: host
     volumes:
       - ./coturn/turnserver.conf:/etc/turnserver.conf:ro
-      - /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem:/etc/coturn/fullchain.pem:ro
-      - /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem:/etc/coturn/privkey.pem:ro
+      - /etc/letsencrypt/live/<you-domain>/fullchain.pem:/etc/coturn/fullchain.pem:ro
+      - /etc/letsencrypt/live/<you-domain>/privkey.pem:/etc/coturn/privkey.pem:ro
     restart: unless-stopped
+
+  postgres:
+    image: postgres
+    container_name: postgres
+    environment:
+      POSTGRES_DB: doorbell
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  db-migrate:
+    image: <your-image>
+    container_name: db-migrate
+    environment:
+      ENV: PRODUCTION
+      PRODUCTION_DB_CONNECTION_STRING: postgresql+asyncpg://<user>:<password>@postgres:5432/doorbell
+    depends_on:
+      - postgres
+    entrypoint: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  backend:
+    image: <your-image>
+    container_name: backend
+    environment:
+      ENV: PRODUCTION
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_SECRET_KEY: <secret>
+      JWT_REFRESH_SECRET_KEY: <secret>
+      JWT_ACCESS_TOKEN_EXPIRE: 900
+      JWT_REFRESH_TOKEN_EXPIRE: 2592000
+      PRODUCTION_DB_CONNECTION_STRING: postgresql+asyncpg://<user>:<password>@postgres:5432/doorbell
+      CAPTURE_DIR: /opt/captures
+    volumes:
+        - ./nginx/bucket:/opt/captures
+    depends_on:
+      - db-migrate
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:

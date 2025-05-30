@@ -1,5 +1,15 @@
 import enum
+import json
+from datetime import datetime
 
+
+class MessageTypeJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, enum.Enum):
+            return obj.value
+        elif isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 class MessageType(enum.Enum):
     PING = 1

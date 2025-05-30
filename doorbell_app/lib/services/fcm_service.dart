@@ -1,162 +1,99 @@
-import 'dart:convert';
-import 'package:doorbell_app/firebase_options.dart';
-import 'package:doorbell_app/services/notification_nav.dart';
+import 'package:doorbell_app/screens/in_app_notification.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
-import 'package:doorbell_app/services/service_locator.dart';
-/*
-class FirebaseMessagingService {
-  static final FirebaseMessagingService _instance = FirebaseMessagingService._internal();
-  factory FirebaseMessagingService() => _instance;
-  FirebaseMessagingService._internal();
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:overlay_support/overlay_support.dart';
+import '../main.dart';
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
-  Future<void> initialize(GlobalKey<NavigatorState> navigatorKey) async {
-    await _initializeLocalNotifications(navigatorKey);
+class NotificationService {
+  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
 
-    NotificationSettings settings = await _messaging.requestPermission(
-      alert: true, badge: true, sound: true, provisional: false,
+  static Future<void> initialize() async {
+    await Firebase.initializeApp();
+    NotificationSettings settings = await _firebaseMessaging.requestPermission(
+      alert: true,
+      announcement: false,
+      badge: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+      sound: true,
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      FirebaseMessaging.onMessage.listen(handleForegroundMessage);
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpenedAppFromBackground);
-
-      RemoteMessage? initialMessage = await _messaging.getInitialMessage();
-      if (initialMessage != null) {
-        _handleInitialMessageFromTerminated(initialMessage);
-      }
+      print('User granted permission');
     }
-  }
 
-  Future<void> _initializeLocalNotifications(GlobalKey<NavigatorState> navigatorKey) async {
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
-    const InitializationSettings initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    await _notificationsPlugin.initialize(
-      initSettings,
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+
+    await _localNotifications.initialize(
+      initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        if (response.payload != null && response.payload!.isNotEmpty) {
-          try {
-            final Map<String, dynamic> data = jsonDecode(response.payload!);
-            //serviceLocator<NotificationNavigator>().handleNotificationNavigation(data, navigatorKey: navigatorKey);
-          } catch (e) {
-            print('Error parsing local notification payload: $e');
-          }
-        }
+        _handleNotificationTap(response.payload);
       },
     );
-    await _createNotificationChannels();
-  }
-
-  Future<void> _createNotificationChannels() async {
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'doorbell_events_channel_id',
-      'Doorbell Events',
-      description: 'Notifications for doorbell events.',
-      importance: Importance.max,
+      'doorbell_notifications',
+      'Doorbell Notifications',
+      description: 'Notifications for doorbell events',
+      importance: Importance.high,
+      enableVibration: true,
       playSound: true,
     );
-    await _notificationsPlugin
+
+    await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
-  }
 
-  void handleForegroundMessage(RemoteMessage message) {
-    print('Foreground FCM: ${message.messageId}');
-    if (message.data.isNotEmpty || message.notification != null) {
-      showLocalNotification(message);
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationTap(initialMessage);
     }
   }
 
-  void _handleInitialMessageFromTerminated(RemoteMessage message) {
-    print('App opened from FCM (Terminated): ${message.messageId}');
-    final Map<String, dynamic> data = Map<String, dynamic>.from(message.data);
-    //serviceLocator<NotificationNavigator>().handleNotificationNavigation(data);
+  static Future<String?> getToken() async {
+    return await _firebaseMessaging.getToken();
   }
 
-  void _handleNotificationOpenedAppFromBackground(RemoteMessage message) {
-    print('App opened from FCM (Background): ${message.messageId}');
-    final Map<String, dynamic> data = Map<String, dynamic>.from(message.data);
-    //serviceLocator<NotificationNavigator>().handleNotificationNavigation(data);
-  }
-
-  Future<void> showLocalNotification(RemoteMessage message) async {
-    final Map<String, dynamic> data = Map<String, dynamic>.from(message.data);
-    final String title = data['title'] ?? message.notification?.title ?? 'Doorbell Alert';
-    final String body = data['type_str'] != null
-                        ? 'Event: ${data['type_str']?.replaceAll('_', ' ')}'
-                        : (message.notification?.body ?? 'A new event occurred.');
-    final String payloadJson = jsonEncode(data);
-
-    await _notificationsPlugin.show(
-      message.hashCode,
-      title,
-      body,
-      NotificationDetails(
-        android: const AndroidNotificationDetails(
-          'doorbell_events_channel_id',
-          'Doorbell Events',
-          channelDescription: 'Notifications for doorbell events.',
-          icon: '@mipmap/ic_launcher',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
-      ),
-      payload: payloadJson,
+  static void _handleForegroundMessage(RemoteMessage message) {
+    showNotification(
+      title: message.notification?.title ?? 'Doorbell Alert',
+      body: message.notification?.body ?? 'New notification received',
+      data: message.data,
     );
   }
 
-  Future<String?> getToken() async => await _messaging.getToken();
-  Future<void> deleteToken() async => await _messaging.deleteToken();
+  static void _handleNotificationTap(dynamic payload) {
+    Navigator.of(navigatorKey.currentContext!).pushNamed('/notifications');
+    print('Notification tapped: $payload');
+  }
 
-  static Future<void> handleBackgroundMessage(RemoteMessage message) async {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    print('Background FCM (static handler): ${message.messageId}');
-
-    final FlutterLocalNotificationsPlugin notificationsPlugin = FlutterLocalNotificationsPlugin();
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'doorbell_events_channel_id',
-      'Doorbell Events',
-      description: 'Notifications for doorbell events.',
-      importance: Importance.max,
-      playSound: true,
-    );
-    await notificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-    final Map<String, dynamic> data = Map<String, dynamic>.from(message.data);
-    final String title = data['title'] ?? message.notification?.title ?? 'Doorbell Alert';
-    final String body = data['type_str'] != null
-                        ? 'Event: ${data['type_str']?.replaceAll('_', ' ')}'
-                        : (message.notification?.body ?? 'A new event occurred.');
-
-    final String payloadJson = jsonEncode(data);
-
-    await notificationsPlugin.show(
-      message.hashCode,
-      title,
-      body,
-      NotificationDetails(
-        android: const AndroidNotificationDetails(
-          'doorbell_events_channel_id',
-          'Doorbell Events',
-          channelDescription: 'Notifications for doorbell events.',
-          icon: '@mipmap/ic_launcher',
-          importance: Importance.max,
-          priority: Priority.high,
-        ),
-        iOS: const DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true),
+  static void showNotification({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) {
+    showOverlayNotification(
+      (context) => InAppNotification(
+        title: title,
+        body: body,
+        data: data,
+        onTap: () {
+          OverlaySupportEntry.of(context)?.dismiss();
+          _handleNotificationTap(data);
+        },
       ),
-      payload: payloadJson,
+      duration: Duration(seconds: 4),
     );
   }
 }
-*/

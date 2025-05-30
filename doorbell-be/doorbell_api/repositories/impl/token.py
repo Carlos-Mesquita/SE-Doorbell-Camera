@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from ...configs.db import BaseRepo, DB
 from ...dtos import TokenDTO
 from ...models import Token
 from ...repositories import ITokenRepository
@@ -8,13 +9,15 @@ from ...repositories import ITokenRepository
 from typing import cast, Dict, Any
 
 from sqlalchemy import select, delete
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import BinaryExpression
+from dependency_injector.wiring import Provide, inject
 
-class TokenRepository(ITokenRepository):
 
-    def __init__(self, db_session: AsyncSession, config: Dict[str, Any]):
-        self._db_session = db_session
+class TokenRepository(BaseRepo[Token],ITokenRepository):
+
+    @inject
+    def __init__(self, config: Dict[str, Any] = Provide['config']):
+        super().__init__(Token)
         self._config = config
 
 
@@ -24,8 +27,8 @@ class TokenRepository(ITokenRepository):
             created_at=refresh_token_dto.created_at,
             expires_at=refresh_token_dto.expires_at
         )
-        self._db_session.add(token)
-        await self._db_session.flush()
+        self.session.add(token)
+        await self.session.flush()
 
 
     async def revoke_refresh_token(self, guid: UUID) -> None:
@@ -33,7 +36,7 @@ class TokenRepository(ITokenRepository):
         guid_condition = cast(BinaryExpression, guid_column == guid)
 
         delete_query = delete(Token).where(guid_condition)
-        await self._db_session.execute(delete_query)
+        await self.session.execute(delete_query)
 
 
     async def is_refresh_token_valid(self, guid: UUID) -> bool:
@@ -41,7 +44,7 @@ class TokenRepository(ITokenRepository):
         guid_condition = cast(BinaryExpression, guid_column == guid)
 
         query = select(Token).where(guid_condition)
-        result = await self._db_session.execute(query)
+        result = await self.session.execute(query)
         token = result.scalars().first()
 
         if not token:
@@ -71,6 +74,6 @@ class TokenRepository(ITokenRepository):
         api_token_condition = cast(BinaryExpression, expires_column is None)
 
         query = select(Token).where(token_condition, api_token_condition)
-        result = await self._db_session.execute(query)
+        result = await self.session.execute(query)
         token = result.scalars().first()
         return token is not None

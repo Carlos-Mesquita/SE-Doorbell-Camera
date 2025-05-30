@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, Query, Path
 from typing import List, Optional
 from ..dtos import NotificationDTO
 from ..controllers import INotificationController
-from ..dtos import HitsDTO
 from ..middlewares import OAuth2Authorized
 
 notification_router = APIRouter()
@@ -28,7 +27,8 @@ async def get_all_notifications(
         "page": page,
         "page_size": page_size,
         "sort_by": sort_by,
-        "sort_order": sort_order
+        "sort_order": sort_order,
+        "eager_load": ['captures']
     }
     return await controller.get_all(**pagination)
 

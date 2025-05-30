@@ -42,7 +42,45 @@ class PeripheralsService:
         self._button_polling_task: Optional[Task] = None
         self._motion_polling_task: Optional[Task] = None
 
+        self._was_streaming = False
+        self._streaming_cooldown_task: Optional[Task] = None
+        self._streaming_cooldown_seconds = 5.0
+
         self._logger = getLogger(__name__)
+
+    async def on_streaming_started(self):
+        self._logger.info("Streaming started - checking if recording needs to be stopped")
+        async with self._state_lock:
+            if self._state == ControllerState.RECORDING:
+                self._logger.info("Stopping recording due to streaming start")
+                await self._stop_recording_unsafe()
+                await self._transition_to(ControllerState.STREAMING)
+            elif self._state == ControllerState.IDLE:
+                self._logger.info("Transitioning from IDLE to STREAMING")
+                await self._transition_to(ControllerState.STREAMING)
+        self._was_streaming = True
+
+    async def on_streaming_stopped(self):
+        self._logger.info("Streaming stopped - starting cooldown period")
+        async with self._state_lock:
+            if self._state == ControllerState.STREAMING:
+                await self._transition_to(ControllerState.IDLE)
+
+        if self._streaming_cooldown_task:
+            self._streaming_cooldown_task.cancel()
+        self._streaming_cooldown_task = create_task(self._streaming_cooldown(), name="StreamingCooldown")
+
+    async def _streaming_cooldown(self):
+        try:
+            self._logger.info(f"Starting {self._streaming_cooldown_seconds}s cooldown after streaming")
+            await asyncio.sleep(self._streaming_cooldown_seconds)
+            self._was_streaming = False
+            self._logger.info("Streaming cooldown completed - motion detection re-enabled")
+        except CancelledError:
+            self._logger.info("Streaming cooldown cancelled")
+
+    async def should_suppress_motion_events(self) -> bool:
+        return self._was_streaming or (self._streaming_cooldown_task and not self._streaming_cooldown_task.done())
 
     @property
     async def state(self) -> ControllerState:
@@ -60,30 +98,36 @@ class PeripheralsService:
         try:
             if self._state in [ControllerState.STREAMING, ControllerState.RECORDING]:
                 self._rgb_service.turn_on()
+                self._logger.debug("RGB lights turned ON")
             else:
                 self._rgb_service.turn_off()
+                self._logger.debug("RGB lights turned OFF")
         except Exception as e:
             self._logger.error(f"Error controlling RGB during state transition: {e}", exc_info=True)
 
     async def handle_sensor_event(self, event: Event[SensorEvent]):
-        self._logger.debug(
-            f"Handling sensor event: {event.type.value} from {event.source_device_id if event.source_device_id else 'unknown sensor'}")
+        self._logger.debug(f"Handling sensor event: {event.type.value}")
+
+        if event.type == SensorEvent.MOTION_DETECTED:
+            if await self.should_suppress_motion_events():
+                self._logger.debug(f"Suppressing motion event {event.id} - streaming active or cooldown")
+                return
 
         async with self._state_lock:
             current_state = self._state
 
             if event.type in [SensorEvent.BUTTON_PRESSED, SensorEvent.MOTION_DETECTED, SensorEvent.FACE_DETECTED]:
                 if current_state == ControllerState.IDLE:
-                    self._logger.info(f"Sensor event ({event.type.value}) occurred in IDLE state. Starting recording.")
-                    await self._begin_or_reset_recording_unsafe()  # Call unsafe version as lock is held
+                    self._logger.info(
+                        f"Sensor event ({event.type.value}, id: {event.id}) occurred in IDLE state. Starting recording.")
+                    await self._begin_or_reset_recording_unsafe(event_id=event.id)
                 elif current_state == ControllerState.RECORDING:
                     self._logger.info(
-                        f"Sensor event ({event.type.value}) occurred during RECORDING. Resetting recording timer.")
-                    await self._begin_or_reset_recording_unsafe()  # Reset timer
+                        f"Sensor event ({event.type.value}, id: {event.id}) occurred during RECORDING. Resetting recording timer.")
+                    await self._begin_or_reset_recording_unsafe(event_id=event.id)
                 elif current_state == ControllerState.STREAMING:
                     self._logger.info(
-                        f"Sensor event ({event.type.value}) occurred during STREAMING. No change to recording state.")
-
+                        f"Sensor event ({event.type.value}, id: {event.id}) occurred during STREAMING. No change to recording state.")
 
     async def handle_settings_event(self, event: Event[SettingsEvent]) -> Optional[Dict[str, Any]]:
         self._logger.info(f"Handling settings event: {event.type}")
@@ -168,8 +212,7 @@ class PeripheralsService:
             }
         return None
 
-    async def _begin_or_reset_recording_unsafe(self):
-
+    async def _begin_or_reset_recording_unsafe(self, event_id: Optional[str] = None):
         if self._recording_task:
             self._recording_task.cancel()
             self._recording_task = None
@@ -178,10 +221,10 @@ class PeripheralsService:
 
         if current_state_unsafe == ControllerState.IDLE:
             self._logger.info("Starting stop motion recording (unsafe)...")
-            if await self._camera_service.begin_stop_motion():
+            if await self._camera_service.begin_stop_motion(event_id=event_id):
                 await self._transition_to(ControllerState.RECORDING)
             else:
-                self._logger.error("Failed to begin stop motion recording.")
+                self._logger.debug("Failed to begin stop motion recording - likely due to active streaming.")
                 return
 
         elif current_state_unsafe == ControllerState.RECORDING:
@@ -200,13 +243,17 @@ class PeripheralsService:
             await asyncio.sleep(self._recording_duration_seconds)
             self._logger.info("Recording timer expired. Stopping recording.")
             async with self._state_lock:
-                await self._stop_recording_unsafe()
+                if self._state == ControllerState.RECORDING:
+                    await self._stop_recording_unsafe()
+                else:
+                    self._logger.info("Recording timer expired but no longer in RECORDING state - timer was superseded")
         except CancelledError:
             self._logger.info("Recording timer cancelled.")
 
-
     async def _stop_recording_unsafe(self):
-        self._recording_task = None
+        if self._recording_task:
+            self._recording_task.cancel()
+            self._recording_task = None
 
         if self._state == ControllerState.RECORDING:
             self._logger.info("Stopping stop motion capture (unsafe)...")
@@ -216,63 +263,20 @@ class PeripheralsService:
             self._logger.debug(
                 f"Stop recording called but not in RECORDING state (current: {self._state}). No action taken.")
 
-    async def start_stream(self) -> Optional[str]:
-        async with self._state_lock:
-            current_state = self._state
-            self._logger.info(f"Request to start stream. Current state: {current_state.value}")
-
-            if current_state == ControllerState.STREAMING:
-                self._logger.info("Stream already active.")
-                status = await self._camera_service.get_streaming_status()
-                return f"WebRTC stream already active with {status.get('connections', 0)} viewer(s) in room {status.get('room_id', 'N/A')}"
-
-            if current_state == ControllerState.RECORDING:
-                self._logger.info("Currently recording, stopping recording to start stream...")
-                if self._recording_task:
-                    self._recording_task.cancel()
-                    self._recording_task = None
-                await self._camera_service.end_stop_motion()
-
-            stream_info = await self._camera_service.start_stream()
-            if stream_info:
-                self._logger.info(f"Stream started successfully: {stream_info}")
-                await self._transition_to(ControllerState.STREAMING)
-                return stream_info
-            else:
-                self._logger.error("Failed to start stream via camera service.")
-                if current_state == ControllerState.RECORDING:
-                    await self._transition_to(ControllerState.IDLE)
-                return None
-
-    async def stop_stream(self) -> bool:
-        async with self._state_lock:
-            current_state = self._state
-            self._logger.info(f"Request to stop stream. Current state: {current_state.value}")
-
-            if current_state != ControllerState.STREAMING:
-                self._logger.warning("Stop stream called, but not currently streaming.")
-                return False
-
-            success = await self._camera_service.stop_stream()
-            if success:
-                self._logger.info("Stream stopped successfully via camera service.")
-                await self._transition_to(ControllerState.IDLE)
-                return True
-            else:
-                self._logger.error(
-                    "Failed to stop stream via camera service. State remains STREAMING (or should be error state).")
-                return False
-
     async def start(self):
         self._logger.info("Starting peripheral services...")
         self._stop_event.clear()
+
         await self._button_service.start()
         await self._motion_service.start()
+        await self._camera_service.start()
+
+        self._logger.info("All peripheral services started successfully.")
 
         async with self._state_lock:
             await self._transition_to(ControllerState.IDLE)
 
-        self._logger.info("Peripheral services started.")
+        self._logger.info("Peripheral services started and state set to IDLE.")
 
     async def stop(self):
         self._logger.info("Stopping peripheral services...")
@@ -284,13 +288,19 @@ class PeripheralsService:
                 try:
                     await self._recording_task
                 except CancelledError:
-                    pass  # Expected
+                    pass
                 self._recording_task = None
+
+            if self._streaming_cooldown_task:
+                self._streaming_cooldown_task.cancel()
+                try:
+                    await self._streaming_cooldown_task
+                except CancelledError:
+                    pass
+                self._streaming_cooldown_task = None
 
             if self._state == ControllerState.RECORDING:
                 await self._camera_service.end_stop_motion()
-            elif self._state == ControllerState.STREAMING:
-                await self._camera_service.stop_stream()
 
             await self._transition_to(ControllerState.IDLE)
 
@@ -318,6 +328,7 @@ class PeripheralsService:
 
         self._logger.info("Peripheral services stopped and cleaned up.")
 
+
 __all__ = [
     "ButtonService",
     "MotionSensorService",
@@ -325,4 +336,3 @@ __all__ = [
     "CameraService",
     "PeripheralsService"
 ]
-

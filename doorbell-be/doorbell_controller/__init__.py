@@ -21,6 +21,7 @@ from doorbell_controller.services.impl import (
 
 SCRIPT_DIR = Path(__file__).parent
 
+
 class DoorbellController:
     def __init__(self, auth_token: str, ws_url: str, signaling_server_url: str):
         self._logger = logging.getLogger(__name__)
@@ -82,11 +83,21 @@ class DoorbellController:
             self.config['camera']['stop_motion']['duration']
         )
 
+        self.camera_service.set_peripherals_service(self.peripherals)
+
     def _setup_ws_handlers(self):
         self._ws_client.register_handler(
             MessageType.SETTINGS_REQUEST,
             self._handle_settings
         )
+
+    async def _should_suppress_motion_notification(self) -> bool:
+        """Check if motion notifications should be suppressed due to active streaming"""
+        try:
+            return await self.peripherals.should_suppress_motion_events()
+        except Exception as e:
+            self._logger.error(f"Error checking if motion notifications should be suppressed: {e}")
+            return False
 
     async def _process_sensor_events(self):
         while self.running:
@@ -101,6 +112,13 @@ class DoorbellController:
 
                 await self.peripherals.handle_sensor_event(event)
 
+                should_suppress = False
+                if event.type == SensorEvent.MOTION_DETECTED:
+                    should_suppress = await self._should_suppress_motion_notification()
+                    if should_suppress:
+                        self._logger.debug(f"Suppressing motion notification {event.id} - active stream detected.")
+                        continue
+
                 if event.type == SensorEvent.BUTTON_PRESSED:
                     msg_type_val = MessageType.BUTTON_PRESSED.value
                 elif event.type == SensorEvent.FACE_DETECTED:
@@ -112,6 +130,9 @@ class DoorbellController:
                     msg_type=MessageType(msg_type_val),
                     msg_id=event.id
                 ))
+
+                self._logger.debug(f"Sent WebSocket notification for {event.type.value} event {event.id}")
+
             except CancelledError:
                 self._logger.info("Sensor event processing task cancelled.")
                 break
@@ -128,7 +149,8 @@ class DoorbellController:
                 )
 
                 if not capture_event.image_data:
-                    self._logger.warning(f"Capture event for {capture_event.associated_to} has no image data. Skipping.")
+                    self._logger.warning(
+                        f"Capture event for {capture_event.associated_to} has no image data. Skipping.")
                     continue
 
                 encoded_image_data = base64.b64encode(capture_event.image_data).decode('utf-8')
@@ -146,7 +168,8 @@ class DoorbellController:
                     msg_id=capture_event.id,
                     payload=payload
                 ))
-                self._logger.info(f"Sent capture event with {len(capture_event.image_data)} bytes (encoded) for {capture_event.associated_to}")
+                self._logger.info(
+                    f"Sent capture event with {len(capture_event.image_data)} bytes (encoded) for {capture_event.associated_to}")
 
             except asyncio.TimeoutError:
                 continue
@@ -226,7 +249,6 @@ class DoorbellController:
         self._logger.info('Stopping doorbell controller...')
         self.running = False
         self._shutdown_event.set()
-
 
         if hasattr(self, 'peripherals'):
             await self.peripherals.stop()

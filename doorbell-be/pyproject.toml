@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "se-doorbell-camera"
+version = "0.1.0"
+description = ""
+authors = ["Carlos-Mesquita <cmesquita1999@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.11"
+dependency-injector = "^4.46.0"
+pyjwt = "^2.10.1"
+python-dotenv = "^1.0.1"
+sqlalchemy = "^2.0.39"
+asyncpg = "^0.30.0"
+bcrypt = "^4.3.0"
+click = "^8.1.8"
+uvicorn = "^0.34.0"
+alembic = "^1.15.1"
+websockets = "^15.0.1"
+firebase-admin = "^6.8.0"
+gunicorn = "^23.0.0"
+aiofiles = "^24.1.0"
+pillow = "^11.2.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

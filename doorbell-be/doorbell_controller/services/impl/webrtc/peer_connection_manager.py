@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Callable, Awaitable, Tuple
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
 from aiortc.sdp import candidate_from_sdp
 
-from pi_camera_track import PiCameraTrack  # type: ignore
+from .stream_track import PiCameraTrack  # type: ignore
 
 import time
 import hmac
@@ -24,8 +24,8 @@ class PeerConnectionManager:
 
         _turn_conf = turn_conf if turn_conf else {}
 
-        self._turn_host = _turn_conf.get('host')
-        self._turn_shared_secret = _turn_conf.get('secret')
+        self._turn_host = os.getenv('TURN_HOST')
+        self._turn_shared_secret = os.getenv('TURN_SECRET')
 
         if self._turn_host and not self._turn_shared_secret:
             logger.warning("TURN server host provided but no secret. TURN might not work.")
@@ -40,47 +40,39 @@ class PeerConnectionManager:
         credential = base64.b64encode(hmac_obj.digest()).decode('utf-8')
         return username_with_expiry, credential
 
-    def _create_rtc_configuration(
-            self) -> RTCConfiguration:
-        ice_servers = [
-            RTCIceServer(urls="stun:stun.l.google.com:19302")
-        ]
+    def _create_rtc_configuration(self) -> RTCConfiguration:
+        ice_servers = []
 
         if self._turn_host and self._turn_shared_secret:
             turn_username_base = self.client_id if self.client_id else "doorbell_broadcaster"
             username, credential = self._create_turn_credential(turn_username_base, self._turn_shared_secret)
 
             ice_servers.append(RTCIceServer(
-                urls=f"turns:{self._turn_host}:5349?transport=tcp",
-                username=username,
-                credential=credential
+                f"turns:{self._turn_host}:5349?transport=tcp",
+                username,
+                credential
             ))
             ice_servers.append(RTCIceServer(
-                urls=f"turn:{self._turn_host}:3478?transport=udp",
-                username=username,
-                credential=credential
+                f"turn:{self._turn_host}:3478?transport=udp", 
+                username,
+                credential
             ))
-            ice_servers.append(RTCIceServer(
-                urls=f"turn:{self._turn_host}:5349?transport=udp",
-                username=username,
-                credential=credential
-            ))
+            logger.info(f"TURN servers configured for {self._turn_host}")
         else:
-            logger.info("TURN server host or secret not configured. Proceeding without TURN.")
+            logger.info("No TURN configuration - using no ICE servers (local network only)")
 
         return RTCConfiguration(iceServers=ice_servers)
 
     def set_on_ice_candidate_callback(self, callback: Callable[[str, Any], Awaitable[None]]):
         self.on_ice_candidate_callback = callback
 
-    async def create_peer_connection(self, viewer_id: str) -> RTCPeerConnection:  # Made async for on_icecandidate
+    async def create_peer_connection(self, viewer_id: str) -> RTCPeerConnection:
         config = self._create_rtc_configuration()
         pc = RTCPeerConnection(configuration=config)
 
         @pc.on("icecandidate")
         async def on_icecandidate(candidate):
             if candidate and self.on_ice_candidate_callback:
-                # Pass viewer_id and candidate to the callback set by SignalingClient
                 await self.on_ice_candidate_callback(viewer_id, candidate)
             elif not candidate:
                 logger.info(f"ICE gathering complete for viewer {viewer_id}.")
@@ -89,22 +81,15 @@ class PeerConnectionManager:
         async def on_connectionstatechange():
             logger.info(f"Connection state for viewer {viewer_id} is {pc.connectionState}")
             if pc.connectionState == "failed":
-                logger.warning(f"PeerConnection for viewer {viewer_id} failed.")
                 if viewer_id in self.peer_connections:
-                    # await self.close_peer_connection(viewer_id) # Create a helper
-                    if viewer_id in self.peer_connections:
-                        _pc_to_close = self.peer_connections.pop(viewer_id)
-                        await _pc_to_close.close()
-                        logger.info(f"Closed failed PeerConnection for viewer {viewer_id}.")
-
+                    del self.peer_connections[viewer_id]
+                    logger.info(f"Removed failed PeerConnection for viewer {viewer_id}")
+                await pc.close()
             elif pc.connectionState == "closed":
                 logger.info(f"PeerConnection for viewer {viewer_id} closed.")
-                if viewer_id in self.peer_connections:  # Remove if closed by other means
-                    del self.peer_connections[viewer_id]
             elif pc.connectionState == "connected":
-                logger.info(f"PeerConnection for viewer {viewer_id} connected.")
+                logger.info(f"PeerConnection for viewer {viewer_id} connected successfully!")
 
-        # Adding video track
         if self.picam2:
             video_track = PiCameraTrack(self.picam2)
             pc.addTrack(video_track)
@@ -117,14 +102,13 @@ class PeerConnectionManager:
 
     async def handle_offer(self, viewer_id: str, sdp: str) -> Optional[str]:
         logger.info(f"Handling offer from viewer: {viewer_id}")
-        # self.current_viewer_id = viewer_id # This might not be needed
 
         if viewer_id in self.peer_connections:
             logger.info(f"Existing PeerConnection found for viewer {viewer_id}, closing it before creating new one.")
             existing_pc = self.peer_connections.pop(viewer_id)
             await existing_pc.close()
 
-        pc = await self.create_peer_connection(viewer_id)  # create_peer_connection is now async
+        pc = await self.create_peer_connection(viewer_id)
 
         try:
             offer = RTCSessionDescription(sdp=sdp, type="offer")
@@ -135,8 +119,8 @@ class PeerConnectionManager:
             return pc.localDescription.sdp if pc.localDescription else None
         except Exception as e:
             logger.error(f"Error handling offer for {viewer_id}: {e}", exc_info=True)
-            await pc.close()  # Clean up the newly created PC
-            if viewer_id in self.peer_connections:  # Should have been added by create_peer_connection
+            await pc.close()
+            if viewer_id in self.peer_connections:
                 del self.peer_connections[viewer_id]
             return None
 
@@ -155,24 +139,23 @@ class PeerConnectionManager:
             sdp_mline_index = candidate_data.get("sdpMLineIndex")
 
             if not candidate_str:
-                logger.info(
-                    f"Received ICE candidate data from {viewer_id} with no candidate string. sdpMid: {sdp_mid}, sdpMLineIndex: {sdp_mline_index}")
+                logger.info(f"Received ICE candidate data from {viewer_id} with no candidate string.")
                 return
 
-            ice_candidate_obj = candidate_from_sdp(candidate_str)
+            if candidate_str.startswith("candidate:"):
+                candidate_str = candidate_str[10:]
 
+            ice_candidate_obj = candidate_from_sdp(candidate_str)
             ice_candidate_obj.sdpMid = sdp_mid
-            ice_candidate_obj.sdpMLineIndex = int(
-                sdp_mline_index if sdp_mline_index is not None else 0)
+            ice_candidate_obj.sdpMLineIndex = int(sdp_mline_index if sdp_mline_index is not None else 0)
 
             await pc.addIceCandidate(ice_candidate_obj)
             logger.debug(f"Added ICE candidate from {viewer_id}: {candidate_str[:30]}...")
 
         except ValueError as ve:
-            logger.error(f"Error parsing ICE candidate string for {viewer_id}: {ve} - Data: {candidate_data}",
-                         exc_info=True)
+            logger.error(f"Error parsing ICE candidate string for {viewer_id}: {ve} - Data: {candidate_data}")
         except Exception as e:
-            logger.error(f"Error adding ICE candidate from {viewer_id}: {e} - Data: {candidate_data}", exc_info=True)
+            logger.error(f"Error adding ICE candidate from {viewer_id}: {e} - Data: {candidate_data}")
 
     async def handle_client_left(self, client_id_left: str) -> None:
         logger.info(f"Handling client left: {client_id_left}")
@@ -189,6 +172,9 @@ class PeerConnectionManager:
             if viewer_id in self.peer_connections:
                 pc = self.peer_connections.pop(viewer_id)
                 try:
+                    for sender in pc.getSenders():
+                        if sender.track and isinstance(sender.track, PiCameraTrack):
+                            sender.track.stop()
                     await pc.close()
                 except Exception as e:
                     logger.error(f"Error closing peer connection for {viewer_id} during cleanup: {e}")

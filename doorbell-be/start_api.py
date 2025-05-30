@@ -2,6 +2,9 @@ import os
 
 import click
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @click.command()

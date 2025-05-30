@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from ...dtos import NotificationDTO, SettingsDTO, CaptureDTO
 
@@ -8,7 +8,9 @@ class INotificationController(IBaseController[NotificationDTO], ABC):
     pass
 
 class ICaptureController(IBaseController[CaptureDTO], ABC):
-    pass
+    @abstractmethod
+    async def generate_cap_video(self, ids: list[str]):
+        pass
 
 class ISettingsController(IBaseController[SettingsDTO], ABC):
     pass

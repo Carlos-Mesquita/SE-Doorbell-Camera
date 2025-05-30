@@ -19,10 +19,10 @@ class DashboardScreen extends StatelessWidget {
           children: [
             _DashboardButton(
               icon: Icons.image,
-              label: 'Gravações',
+              label: 'Notifications',
               color: Colors.blueAccent,
               onTap: () {
-                Navigator.of(context).pushNamed('/stopmotion');
+                Navigator.of(context).pushNamed('/notifications');
               },
             ),
             _DashboardButton(
@@ -35,18 +35,10 @@ class DashboardScreen extends StatelessWidget {
             ),
             _DashboardButton(
               icon: Icons.settings,
-              label: 'Definições',
+              label: 'Settings',
               color: Colors.green,
               onTap: () {
                 Navigator.of(context).pushNamed('/settings');
-              },
-            ),
-            _DashboardButton(
-              icon: Icons.notifications,
-              label: 'Notificações',
-              color: Colors.orangeAccent,
-              onTap: () {
-                // Navegar para a página de notificações (se fizeres)
               },
             ),
           ],

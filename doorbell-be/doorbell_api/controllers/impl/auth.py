@@ -1,4 +1,5 @@
 from fastapi.responses import JSONResponse, Response
+from dependency_injector.wiring import Provide, inject
 
 from ...controllers import IAuthController
 from ...dtos import UserCredentialsDTO
@@ -7,7 +8,8 @@ from ...services import IAuthService
 
 class AuthController(IAuthController):
 
-    def __init__(self, service: IAuthService):
+    @inject
+    def __init__(self, service: IAuthService = Provide['auth_service']):
         self._service = service
 
     async def generate_tokens(self, creds: UserCredentialsDTO):

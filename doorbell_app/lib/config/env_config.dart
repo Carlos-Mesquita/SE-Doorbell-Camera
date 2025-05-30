@@ -21,10 +21,9 @@ class EnvConfig {
     await dotenv.load(fileName: fileName);
   }
 
-  static String get apiUrl => dotenv.env['API_URL'] ?? 'http://localhost:8000/api';
-  // Fallback to google's stun server
+  static String? get apiUrl => dotenv.env['API_URL'];
   static String get turnHost => dotenv.env['TURN_HOST'] ?? 'stun.l.google.com';
   static String? get turnSecret => dotenv.env['TURN_SECRET'];
-  static String get signalingWebsocket =>  dotenv.env['SIGNALING_WS'] ?? 'ws://localhost:8000/api/ws/webrtc';
-  static String get captureBase  =>  dotenv.env['CAPTURES'] ?? 'https://doorbell.cmesquita.com/captures/';
+  static String? get signalingWebsocket =>  dotenv.env['SIGNALING_WS'];
+  static String? get captureBase  =>  dotenv.env['CAPTURES'];
 }

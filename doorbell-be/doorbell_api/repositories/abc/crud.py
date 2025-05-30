@@ -18,3 +18,6 @@ class INotificationRepository(IBaseRepository[Notification], ABC):
     async def find_by_rpi_event_id(self, rpi_event_id: str, user_id: Optional[str] = None) -> Optional[Notification]:
         pass
 
+    @abstractmethod
+    async def is_rate_limited(self, user_id: str, rate_limit=1):
+        pass

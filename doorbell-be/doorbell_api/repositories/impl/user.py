@@ -1,15 +1,15 @@
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from doorbell_api.configs.db import BaseRepo
 from doorbell_api.models.user import User
 from doorbell_api.repositories import IUserRepository
 
 
-class UserRepository(IUserRepository):
-    def __init__(self, db_session: AsyncSession):
-        self.session = db_session
+class UserRepository(BaseRepo[User], IUserRepository):
+    def __init__(self):
+        super().__init__(User)
 
     async def get_by_email(self, email: str) -> Optional[User]:
         query = select(User).where(User.email == email)

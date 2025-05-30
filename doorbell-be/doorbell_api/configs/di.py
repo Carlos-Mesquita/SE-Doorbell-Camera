@@ -1,7 +1,5 @@
-from asyncio import Queue
-
 from dependency_injector import providers, containers
-from ..configs.db import scoped_session
+from ..configs.db import DB, set_db
 
 
 class DependencyInjector:
@@ -31,6 +29,8 @@ class DependencyInjector:
         self._container.config.jwt.access.key.from_env("JWT_ACCESS_SECRET_KEY", required=True)
         self._container.config.jwt.access.expires.from_env("JWT_ACCESS_TOKEN_EXPIRE", required=True)
 
+        self._container.config.capture_dir.from_env("CAPTURE_DIR", required=True)
+
     def _setup_shared_instances(self):
         from ..services.impl import WebRTCSignalingService
         self._container.signaling_service = providers.Singleton(WebRTCSignalingService)
@@ -49,27 +49,15 @@ class DependencyInjector:
             SettingsRepository, NotificationRepository, FCMDeviceRepository
         )
 
-        self._container.db_session = providers.Factory(
-            scoped_session
-        )
-        self._container.token_repo = providers.Factory(
-            TokenRepository, db_session=self._container.db_session, config=self._container.config
-        )
-        self._container.user_repo = providers.Factory(
-            UserRepository, db_session=self._container.db_session
-        )
-        self._container.capture_repo = providers.Factory(
-            CaptureRepository, db_session=self._container.db_session
-        )
-        self._container.settings_repo = providers.Factory(
-            SettingsRepository, db_session=self._container.db_session
-        )
-        self._container.notification_repo = providers.Factory(
-            NotificationRepository, db_session=self._container.db_session
-        )
-        self._container.fcm_device_repo = providers.Factory(
-            FCMDeviceRepository, db_session=self._container.db_session
-        )
+        db = DB()
+        set_db(db)
+        self._container.db = providers.Object(db)
+        self._container.token_repo = providers.Factory(TokenRepository)
+        self._container.user_repo = providers.Factory(UserRepository)
+        self._container.capture_repo = providers.Factory(CaptureRepository)
+        self._container.settings_repo = providers.Factory(SettingsRepository)
+        self._container.notification_repo = providers.Factory(NotificationRepository)
+        self._container.fcm_device_repo = providers.Factory(FCMDeviceRepository)
 
     def _setup_services(self):
         from ..services.impl import (
@@ -77,42 +65,13 @@ class DependencyInjector:
             SettingsService, NotificationService,
             MessageHandler, DeviceService
         )
-
-        self._container.token_service = providers.Factory(
-            TokenService, token_repo=self._container.token_repo
-        )
-
-        self._container.capture_service = providers.Factory(
-            CaptureService, mapper=self._container.capture_mapper, repo=self._container.capture_repo
-        )
-        self._container.settings_service = providers.Factory(
-            SettingsService, mapper=self._container.settings_mapper, repo=self._container.settings_repo
-        )
-        self._container.device_service = providers.Factory(
-            DeviceService, fcm_device_repo=self._container.fcm_device_repo
-        )
-
-        self._container.notification_service = providers.Factory(
-            NotificationService,
-            mapper=self._container.notification_mapper,
-            repo=self._container.notification_repo,
-            device_service=self._container.device_service
-        )
-
-        self._container.message_handler = providers.Factory(
-            MessageHandler,
-            notification_service=self._container.notification_service,
-            capture_service=self._container.capture_service,
-            notification_repo=self._container.notification_repo,
-            captures_base_dir='/opt/captures'
-        )
-
-        self._container.auth_service = providers.Factory(
-            AuthService,
-            token_service=self._container.token_service,
-            user_repo=self._container.user_repo,
-            config=self._container.config
-        )
+        self._container.token_service = providers.Factory(TokenService)
+        self._container.capture_service = providers.Factory(CaptureService)
+        self._container.settings_service = providers.Factory(SettingsService)
+        self._container.device_service = providers.Factory(DeviceService)
+        self._container.notification_service = providers.Factory(NotificationService)
+        self._container.message_handler = providers.Factory(MessageHandler)
+        self._container.auth_service = providers.Factory(AuthService)
 
     def _setup_controllers(self):
         from ..controllers.impl import (
@@ -120,23 +79,8 @@ class DependencyInjector:
             SettingsController, NotificationController,
             WebsocketController
         )
-
-        self._container.auth_controller = providers.Factory(
-            AuthController, service=self._container.auth_service
-        )
-        self._container.capture_controller = providers.Factory(
-            CaptureController, service=self._container.capture_service
-        )
-        self._container.settings_controller = providers.Factory(
-            SettingsController, service=self._container.settings_service
-        )
-        self._container.notification_controller = providers.Factory(
-            NotificationController, service=self._container.notification_service
-        )
-
-        self._container.ws_controller = providers.Factory(
-            WebsocketController,
-            auth_service=self._container.auth_service,
-            message_handler=self._container.message_handler,
-            signaling_service=self._container.signaling_service
-        )
+        self._container.auth_controller = providers.Factory(AuthController)
+        self._container.capture_controller = providers.Factory(CaptureController)
+        self._container.settings_controller = providers.Factory(SettingsController)
+        self._container.notification_controller = providers.Factory(NotificationController)
+        self._container.ws_controller = providers.Factory(WebsocketController)

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, AsyncGenerator
 
 from doorbell_api.dtos import SettingsDTO, NotificationDTO, CaptureDTO
 from doorbell_api.models import Settings, Notification, Capture
@@ -18,4 +18,7 @@ class INotificationService(IBaseService[NotificationDTO, Notification], ABC):
 
 
 class ICaptureService(IBaseService[CaptureDTO, Capture], ABC):
-    pass
+
+    @abstractmethod
+    def generate_video(self, ids: list[str]) -> AsyncGenerator[bytes, None]:
+        pass

@@ -6,7 +6,5 @@ final GetIt serviceLocator = GetIt.instance;
 
 void setupServiceLocator() {
   serviceLocator.registerSingleton<AuthService>(AuthService());
-  serviceLocator.registerLazySingleton<ApiService>(
-    () => ApiService(authService: serviceLocator<AuthService>()),
-  );
+  serviceLocator.registerLazySingleton<ApiService>(() => ApiService());
 }

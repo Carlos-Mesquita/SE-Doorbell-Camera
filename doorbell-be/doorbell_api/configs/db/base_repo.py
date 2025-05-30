@@ -1,20 +1,27 @@
-from typing import TypeVar, Type, Generic, List, Optional, ClassVar, Tuple, cast, Dict, Any, Sequence
+from typing import TypeVar, Type, Generic, List, Optional, Tuple, cast, Dict, Any, Sequence, Union
 
-from pydantic import BaseModel
-from sqlalchemy.exc import NoResultFound, IntegrityError
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy import select, update, delete, desc, asc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import BinaryExpression, and_
+from sqlalchemy.orm import DeclarativeBase, selectinload
+from dependency_injector.wiring import Provide, inject
 
-from .session import Base
+from doorbell_api.configs.db import DB
 
-TModel = TypeVar('TModel', bound=Base)
+TModel = TypeVar('TModel', bound=DeclarativeBase)
 
 
 class BaseRepo(Generic[TModel]):
-    def __init__(self, model: Type[TModel], db_session: AsyncSession):
+
+    @inject
+    def __init__(self, model: Type[TModel], db: DB = Provide['db']):
         self._model = model
-        self.session = db_session
+        self._db = db
+
+    @property
+    def session(self) -> AsyncSession:
+        return self._db.scoped_session()
 
     def _build_filter_conditions(self, filter_by: Dict[str, Any]) -> Sequence[BinaryExpression]:
         filter_conditions = []
@@ -53,10 +60,23 @@ class BaseRepo(Generic[TModel]):
             page_size: int = 100,
             sort_by: Optional[str] = None,
             sort_order: str = 'asc',
-            filter_by: Optional[Dict[str, Any]] = None
+            filter_by: Optional[Dict[str, Any]] = None,
+            eager_load: Optional[List[Union[str, Any]]] = None
     ) -> List[TModel]:
         skip = (page - 1) * page_size
         query = select(self._model)
+
+        # Add eager loading options if provided
+        if eager_load:
+            for relationship in eager_load:
+                if isinstance(relationship, str):
+                    rel_attr = getattr(self._model, relationship, None)
+                    if rel_attr is None:
+                        raise ValueError(
+                            f"Relationship '{relationship}' does not exist in model {self._model.__name__}")
+                    query = query.options(selectinload(rel_attr))
+                else:
+                    query = query.options(relationship)
 
         if filter_by:
             filter_conditions = self._build_filter_conditions(filter_by)

@@ -1,6 +1,5 @@
-from typing import Optional, List, Type
+from typing import Optional, List
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete
 from datetime import datetime
@@ -11,11 +10,10 @@ from doorbell_api.repositories.impl.base import BaseRepository
 
 
 class FCMDeviceRepository(BaseRepository[FCMDevice], IFCMDeviceRepository):
-
-    def __init__(self, session: AsyncSession, db_session: AsyncSession):
-        super().__init__(FCMDevice, db_session)
-        self.session = session
-
+    
+    def __init__(self):
+        super().__init__(FCMDevice)
+        
     async def get_by_user_and_physical_id(self, user_id: int, physical_device_id: str) -> Optional[FCMDevice]:
         stmt = select(FCMDevice).where(
             FCMDevice.user_id == user_id, FCMDevice.physical_device_id == physical_device_id
@@ -34,7 +32,7 @@ class FCMDeviceRepository(BaseRepository[FCMDevice], IFCMDeviceRepository):
 
     async def update_fcm_device_token(self, device_id: int, new_fcm_token: str, new_app_version: Optional[str]) -> Optional[FCMDevice]:
         stmt = update(FCMDevice).where(FCMDevice.id == device_id).values(
-            fcm_token=new_fcm_token, app_version=new_app_version, last_seen_at=datetime.now(), updated_at=datetime.now()
+            fcm_token=new_fcm_token, app_version=new_app_version, last_seen_at=datetime.now(), modified_at=datetime.now()
         ).returning(FCMDevice)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

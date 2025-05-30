@@ -2,16 +2,17 @@ import 'dart:convert';
 
 import 'package:doorbell_app/models/capture.dart';
 
-class Notification {
-  final int id; // Server's Notification ID
+
+class NotificationDTO {
+  final int id;
   final String title;
   final String createdAt;
-  final List<CaptureInfo> captures;
+  final List<CaptureDTO> captures;
   final String? rpiEventId;
   final String? typeStr;
-  final String? userId;
+  final int? userId;
 
-  Notification({
+  NotificationDTO({
     required this.id,
     required this.title,
     required this.createdAt,
@@ -21,7 +22,6 @@ class Notification {
     this.userId,
   });
 
-  // For saving to SQFlite
   Map<String, dynamic> toDbMap() {
     return {
       'id': id,
@@ -34,8 +34,8 @@ class Notification {
     };
   }
 
-  factory Notification.fromMap(Map<String, dynamic> map) {
-    List<CaptureInfo> capturesList = [];
+  factory NotificationDTO.fromMap(Map<String, dynamic> map) {
+    List<CaptureDTO> capturesList = [];
     dynamic rawCaptures = map['captures_json'] ?? map['captures'];
 
     if (rawCaptures != null) {
@@ -49,7 +49,7 @@ class Notification {
           decodedCaptures = [];
         }
         capturesList = decodedCaptures
-            .map((cMap) => CaptureInfo.fromMap(cMap as Map<String, dynamic>))
+            .map((cMap) => CaptureDTO.fromMap(cMap as Map<String, dynamic>))
             .toList();
       } catch (e) {
         print("Error decoding captures in Notification.fromMap: $e. Raw data: $rawCaptures");
@@ -64,15 +64,22 @@ class Notification {
       parsedId = int.tryParse(idValue) ?? 0;
     }
 
+    final dynamic userIdValue = map['user_id'];
+    int? parsedUserId;
+    if (userIdValue is int) {
+      parsedUserId = userIdValue;
+    } else if (userIdValue is String) {
+      parsedUserId = int.tryParse(userIdValue);
+    }
 
-    return Notification(
+    return NotificationDTO(
       id: parsedId,
       title: map['title'] as String? ?? 'Untitled Notification',
-      createdAt: map['created_at'] as String? ?? map['timestamp'] as String? ?? DateTime.now().toIso8601String(),
+      createdAt: map['created_at'] as String? ?? DateTime.now().toIso8601String(),
       captures: capturesList,
       rpiEventId: map['rpi_event_id'] as String?,
       typeStr: map['type_str'] as String? ?? map['event_type'] as String?,
-      userId: map['user_id'] as String?,
+      userId: parsedUserId,
     );
   }
 }

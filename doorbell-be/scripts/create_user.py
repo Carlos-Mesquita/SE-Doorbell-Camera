@@ -26,8 +26,8 @@ async def create_user():
     current_time = datetime.now()
 
     env = os.environ.get('ENV', 'DEV').upper()
-    connection_string = os.environ[f'DB_CONNECTION_STRING_{env}']
-
+    connection_string = os.environ[f'{env}_DB_CONNECTION_STRING']
+    connection_string = connection_string.replace('postgresql+asyncpg://', 'postgresql://')
     conn = await asyncpg.connect(connection_string)
 
     try:

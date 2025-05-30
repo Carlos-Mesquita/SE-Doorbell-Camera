@@ -1,6 +1,8 @@
 from logging import getLogger
 from typing import Dict, Any, Optional
 from firebase_admin import messaging
+from dependency_injector.wiring import inject, Provide
+
 from doorbell_api.dtos import NotificationDTO
 from doorbell_api.models import Notification
 from doorbell_api.services import INotificationService, IDeviceService
@@ -10,10 +12,11 @@ from .base import BaseService
 
 
 class NotificationService(BaseService[NotificationDTO, Notification], INotificationService):
+    @inject
     def __init__(self,
-        mapper: IMapper[NotificationDTO, Notification],
-        repo: INotificationRepository,
-        device_service: IDeviceService
+        mapper: IMapper[NotificationDTO, Notification] = Provide['notification_mapper'],
+        repo: INotificationRepository = Provide['notification_repo'],
+        device_service: IDeviceService = Provide['device_service'],
     ):
         super().__init__(mapper, repo)
         self._repo = repo
@@ -27,7 +30,6 @@ class NotificationService(BaseService[NotificationDTO, Notification], INotificat
 
             notification_dto = NotificationDTO(**notification_payload_dict)
             created_dto_from_db = await super().create(notification_dto)
-
             self._logger.info(
                 f"Notification DB record created: ID {created_dto_from_db.id} for RPi Event ID {created_dto_from_db.rpi_event_id}"
             )
@@ -69,7 +71,6 @@ class NotificationService(BaseService[NotificationDTO, Notification], INotificat
                 token=device_token,
             )
             response = messaging.send(message)
-            self._logger.info(f"FCM message sent to token {device_token[:10]}... Response: {response}")
             return response
         except Exception as e:
             self._logger.error(f"Error sending FCM to token {device_token[:10]}...: {e}", exc_info=True)

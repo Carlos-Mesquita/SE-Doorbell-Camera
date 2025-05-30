@@ -48,14 +48,14 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> insertNotification(Notification notification) async {
+  Future<int> insertNotification(NotificationDTO notification) async {
     final db = await database;
     Map<String, dynamic> row = notification.toDbMap();
 
     return await db.insert('notifications', row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Notification>> getNotifications() async {
+  Future<List<NotificationDTO>> getNotifications() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notifications',
@@ -66,7 +66,7 @@ class DatabaseHelper {
       return [];
     }
     return List.generate(maps.length, (i) {
-      return Notification.fromMap(maps[i]);
+      return NotificationDTO.fromMap(maps[i]);
     });
   }
 
@@ -84,7 +84,7 @@ class DatabaseHelper {
     return await db.delete('notifications');
   }
 
-  Future<Notification?> getNotificationById(int serverNotificationId) async {
+  Future<NotificationDTO?> getNotificationById(int serverNotificationId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notifications',
@@ -94,7 +94,7 @@ class DatabaseHelper {
     );
 
     if (maps.isNotEmpty) {
-      return Notification.fromMap(maps.first);
+      return NotificationDTO.fromMap(maps.first);
     }
     return null;
   }
